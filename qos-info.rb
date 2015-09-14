@@ -76,10 +76,31 @@ when /linearTopoK2N2/i
     }
     STARTING_ORDER = ["s1-eth1","s2-eth3"]
 # linear k = 4 ,n = 2
-when /linearTopoK4N2/i
+when /linearTopoK4N2-multi/i
+    add_qos_info('s1','3',[1,2])
+    add_qos_info('s2','1',[4])
+    add_qos_info('s2','2',[3])
+    add_qos_info('s3','3',[1,2,4])
+    add_qos_info('s4','3',[1,2])
+    UPSTREAM_INFO = {
+        "s1-eth3" => [HOST[1],HOST[5]],
+        "s2-eth1" => [HOST[3],HOST[4],HOST[7],HOST[8]],
+        "s2-eth2" => [HOST[1],HOST[5]],
+        "s3-eth3" => [HOST[3],HOST[4],HOST[7],HOST[8]],
+        "s4-eth3" => [HOST[4],HOST[8]]
+        
+    }
+    UPSTREAM_SWITCH = {
+        "s2-eth1" => ["s3-eth3","s4-eth3"],
+        "s2-eth2" => ["s1-eth3"],
+        "s3-eth3" => ["s4-eth3"]
+    }
+    STARTING_ORDER = ["s2-eth1","s3-eth3","s4-eth3","s2-eth2","s1-eth3"]
+
+when /linearTopoK4N2-single/i
     add_qos_info('s1','1',[2,3])
-    add_qos_info('s2','3',[1,2])
-    add_qos_info('s3','3',[1,2])
+    add_qos_info('s2','3',[1,2,4])
+    add_qos_info('s3','3',[1,2,4])
     add_qos_info('s4','3',[1,2])
     UPSTREAM_INFO = {
         "s1-eth1" => [HOST[2],HOST[3],HOST[4],HOST[5],HOST[6],HOST[7],HOST[8]],

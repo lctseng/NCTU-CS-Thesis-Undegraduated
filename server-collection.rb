@@ -6,7 +6,12 @@ require 'io/wait' # for IO#ready?
 
 $DEBUG = true
 
-SERVER_OPEN = [5002,5003,5004,5005,5006,5007,5008]
+if ARGV.size > 0
+  SERVER_OPEN = ARGV.collect{|str| str.to_i }
+else
+  SERVER_OPEN = [5001,5002,5003,5004,5005,5006,5007,5008]
+end
+
 
 $servers = {}
 
@@ -78,7 +83,7 @@ end
 
 def process_cmd
     puts "請輸入指令："
-    cmd = gets
+    cmd = $stdin.gets
     case cmd
     when /show/
         start_read_server_info

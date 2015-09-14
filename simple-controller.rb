@@ -3,10 +3,10 @@
 require 'socket'
 require 'thread'
 require './qos-info.rb'
+require './host-info.rb'
 
 $DEBUG = true
 
-SERVER_PORT = 6000
 SHOW_INTERVAL = 0.1
 UPSTREAM_INFO.default = []
 
@@ -33,7 +33,7 @@ $conn_mutex = Mutex.new
 
 # 檢測client到來的thread
 thr_accept = Thread.new do
-    serv = TCPServer.new SERVER_PORT
+    serv = TCPServer.new CONTROLLER_PORT
     loop do
         c = serv.accept
         type,id = c.gets.split
