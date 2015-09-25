@@ -7,7 +7,7 @@ $DEBUG = true
 
 PACKET_SIZE = 1450
 SEND_INTERVAL = 0.001
-INIT_SPEED_PER_SECOND = 10*1000 # 80 Kbit (10 KB)
+INIT_SPEED_PER_SECOND = 0*1000 # 80 Kbit (10 KB)
 INIT_SPEED_PER_INTERVAL = INIT_SPEED_PER_SECOND * SEND_INTERVAL
 
 
@@ -59,6 +59,9 @@ thr_monitor = Thread.new do
         when /mul/
             data = line.split
             eval "$speed = ($speed * #{data[1]}).round"
+        when /assign/
+            spd = line.split[1].to_i
+            $speed = spd * SEND_INTERVAL
         end
     end
 end
