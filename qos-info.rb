@@ -15,6 +15,8 @@ def add_qos_info(sw,eth,ingress_list)
     QOS_INFO["#{sw}-eth#{eth}"] = {eth: eth,ingress_list: ingress_list,sw: sw}
 end
 
+LINK_DELAY = {}
+
 case _mode
 when /simple/
     add_qos_info('s1','1',[2,3]) # Switch名稱、output port(QoS限制此port之流量)、input ports
@@ -115,7 +117,23 @@ when /linearTopoK4N2-single/i
         "s3-eth3" => ["s4-eth3"]
     }
     STARTING_ORDER = ["s1-eth1","s2-eth3","s3-eth3","s4-eth3"]
-
+    default_delay = '0ms'
+    LINK_DELAY.merge!({
+        "s1-eth1" => default_delay,
+        "s1-eth2" => default_delay,
+        "s1-eth3" => default_delay,
+        "s2-eth1" => default_delay,
+        "s2-eth2" => default_delay,
+        "s2-eth3" => default_delay,
+        "s2-eth4" => default_delay,
+        "s3-eth1" => default_delay,
+        "s3-eth2" => default_delay,
+        "s3-eth3" => default_delay,
+        "s3-eth4" => default_delay,
+        "s4-eth1" => default_delay,
+        "s4-eth2" => default_delay,
+        "s4-eth3" => default_delay 
+    })
 
 end
 

@@ -28,6 +28,7 @@ from mininet.util import waitListening
 from mininet.node import RemoteController
 from mininet.link import TCLink
 from mininet.topo import Topo
+from mininet.util import irange, natural, naturalSeq
 
 class SimpleTopo( Topo ):
     "Simple topology example."
@@ -94,9 +95,42 @@ class SwitchSpeedControlTopo( Topo ):
         self.addLink(s2,h2)
         self.addLink(s2,h4)
 
+class MyLinearTopo( Topo ):
+    "Linear topology of k switches, with n hosts per switch."
+
+    def build( self, k=2, n=1,delay=None, **_opts):
+        """k: number of switches
+           n: number of hosts per switch"""
+        self.k = k
+        self.n = n
+
+        if n == 1:
+            genHostName = lambda i, j: 'h%s' % i
+        else:
+            genHostName = lambda i, j: 'h%ss%d' % ( j, i )
+
+        lastSwitch = None
+        for i in irange( 1, k ):
+            # Add switch
+            switch = self.addSwitch( 's%s' % i )
+            # Add hosts to switch
+            for j in irange( 1, n ):
+                host = self.addHost( genHostName( i, j ) )
+                if delay != None:
+                  self.addLink( host, switch, delay=delay, use_htb=True)
+                else:
+                  self.addLink( host, switch)
+            # Connect switch to previous
+            if lastSwitch:
+                if delay != None:
+                  self.addLink( switch, lastSwitch, delay=delay, use_htb=True )
+                else:
+                  self.addLink( switch, lastSwitch )
+            lastSwitch = switch
+
 
 def CreateNet( **kwargs ):
-    topo = LinearTopo(k=4,n=2)
+    topo = MyLinearTopo(k=4,n=2,delay=None)
     return Mininet( topo, **kwargs )
 
 def connectToRootNS( network, switch, ip, routes ):
@@ -146,7 +180,7 @@ def sshd( network, cmd='/sbin/sshd', opts='-D',
     network.stop()
 
 if __name__ == '__main__':
-    lg.setLogLevel( 'info')
+    lg.setLogLevel( 'debug')
     net = CreateNet(link=TCLink, controller=None,ipBase='172.16.0.0/24')
     net.addController('c0',controller=RemoteController,ip='127.0.0.1',port=6653)
     # get sshd args from the command line or use default args
