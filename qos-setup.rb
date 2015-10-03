@@ -45,13 +45,13 @@ LINK_DELAY.each do |port,delay|
   if QOS_INFO.has_key? port
     # 建立在1:1與1:(eth+1)之下
     [1,QOS_INFO[port][:eth].to_i+1].each do |handle|
-      shell_exec  "tc qdisc add dev #{port} parent 1:#{handle} handle #{10+handle}: netem delay #{delay}"
+      shell_exec  "tc qdisc add dev #{port} parent 1:#{handle} handle #{10+handle}: netem delay #{delay} limit 1000"
     end
   else
     # 先清空
     shell_exec "tc qdisc del dev #{port} root"
     # 建立在root底下
-    shell_exec "tc qdisc add dev #{port} root handle 10: netem delay #{delay}"
+    shell_exec "tc qdisc add dev #{port} root handle 10: netem delay #{delay} limit 1000"
 
   end
 end

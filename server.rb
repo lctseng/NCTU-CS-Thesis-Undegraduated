@@ -1,6 +1,8 @@
 #!/usr/bin/env ruby 
 
+
 require 'socket'
+require_relative 'qos-info'
 
 $DEBUG = true
 
@@ -35,8 +37,8 @@ Thread.new do
     loop do
         diff = $size_total - $last_size
         $last_size = $size_total
-        $output.printf("總大小： %.6f Mbit，",$size_total * 8.0 / 1000000.0)
-        $output.puts "區間傳輸大小：#{(sprintf("%3.3f",diff * 8 / 1000000.0))} Mbit，遺失封包數：#{$loss}"
+        $output.printf("總大小： %.6f Mbit，",$size_total * 8.0 / UNIT_MEGA)
+        $output.puts "區間傳輸大小：#{(sprintf("%3.3f",diff * 8.0 / UNIT_MEGA))} Mbit，遺失封包數：#{$loss}"
         sleep 1
     end
 end

@@ -2,6 +2,7 @@
 
 require 'socket'
 require './host-info.rb'
+require_relative 'qos-info'
 
 $DEBUG = true
 
@@ -42,7 +43,7 @@ $delay_send = 0
 thr_detect = Thread.new do
     loop do
         $speed_report = $interval_send
-        printf("總共傳輸：%.6f Mbit，當前速度：%.3f Mbit/s\n",$total_send*8.0/1000000,$interval_send * 8.0 /1000000 )
+        printf("總共傳輸：%.6f Mbit，當前速度：%.3f Mbit/s\n",$total_send*8.0/UNIT_MEGA,$interval_send * 8.0 /UNIT_MEGA )
         $interval_send = 0
         sleep 1
     end
@@ -91,7 +92,7 @@ rescue SystemExit, Interrupt
     thr_detect.exit
     $controller_sock.puts "close"
     puts "終止傳輸，再按一次Ctrl+C結束程式"
-    printf("總共傳輸：%.6f Mbit\n",($total_send*8.0)/1000000 )
+    printf("總共傳輸：%.6f Mbit\n",($total_send*8.0)/UNIT_MEGA )
 end
 loop do
     sleep 1

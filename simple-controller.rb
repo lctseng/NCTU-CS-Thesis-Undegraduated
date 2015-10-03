@@ -119,7 +119,7 @@ def write_should_speed
     if data[:connect] && data[:new_should_spd] != data[:last_should_spd] 
       writing = data[:should_spd] = data[:new_should_spd]
       fd = $client_sw[port][:fd]
-      avg = (data[:avg_speed] / 1000000.0).floor
+      avg = (data[:avg_speed] / UNIT_MEGA.to_f).floor
       if writing < avg
         writing = avg
       end
@@ -168,7 +168,7 @@ def process_switches
     #puts $port_data
 
     # 通知最短時間，queue越長，就可以快速通知避免爆炸
-    threshold = 0.1
+    threshold = 0.5
     len = data[:len]
     if len > 500
       threshold = 0.05
@@ -196,14 +196,14 @@ def check_switch_queue(id,data)
   mul = nil
 
   # 快速增加的條件：低於div_spd的80%
-  if len <= 1 
+  if len < 1 
     add = 100
   elsif len <= 5
-    add = 10
+    add = 20
   elsif len <= 25
-    add = 5
+    add = 10
   elsif len <= 50
-    add = 1
+    add = 5
   elsif len > 50 && len <= 100
     add = 0
   elsif len > 100 && len <= 150
@@ -265,15 +265,15 @@ def check_switch_queue(id,data)
       if host_data[:spd] == 0
         # 初始速度
         min_data = $host_belong_sw[host_id].min do |a,b|
-          (a[:should_spd]*1000000 - a[:total_spd]) <=> (b[:should_spd]*1000000 - b[:total_spd])
+          (a[:should_spd]*UNIT_MEGA - a[:total_spd]) <=> (b[:should_spd]*UNIT_MEGA - b[:total_spd])
         end
-        max_spd = (min_data[:should_spd]*1000000 - min_data[:total_spd])/8
+        max_spd = (min_data[:should_spd]*UNIT_MEGA - min_data[:total_spd])/8
         if max_spd > 0
-          min_div = min_data[:div_spd] * (1000000/8) 
+          min_div = min_data[:div_spd] * (UNIT_MEGA/8) 
           if max_spd > min_div
             max_spd = min_div
           end
-          current = (max_spd * 0.8).round
+          current = (max_spd * 0.9).round
           cmd = "assign #{current}"
           host_data[:expect_spd] = current
           host_data[:cmd] = cmd
@@ -289,12 +289,13 @@ def check_switch_queue(id,data)
         # 平均速度檢查
         final_add = add
         curr_spd = host_data[:spd]
-        if $host_belong_sw[host_id].any? {|data| (curr_spd - data[:avg_speed]) > data[:avg_speed] * 0.05}
+        if $host_belong_sw[host_id].any? {|data| (curr_spd - data[:avg_speed]) > data[:avg_speed] * 0.05 &&
+                                          (curr_spd > data[:div_spd]*UNIT_MEGA )}
           final_add -= 100
         end
         # 檢查接近滿速 
-        if host_data[:spd] > ($host_belong_sw[host_id][0][:div_spd] * 1000000  * 0.9)
-          final_add = 10 if final_add > 10 
+        if host_data[:spd] > ($host_belong_sw[host_id][0][:div_spd] * UNIT_MEGA  * 0.9)
+          final_add = 10 if final_add > 10
         end
 
         #puts "來自#{id}的指令：#{final_add}"
@@ -367,7 +368,7 @@ def show_info
     len = data[:len] 
     bar_len = (len / 25.0).ceil
     p_data = $port_data[id]
-    current_util = ($port_data[id][:total_spd]/((data[:spd] > 0 ? data[:spd] : MAX_SPEED_M)*1000000.0)*100).floor
+    current_util = ($port_data[id][:total_spd]/((data[:spd] > 0 ? data[:spd] : MAX_SPEED_M)*UNIT_MEGA.to_f)*100).floor
     if current_util <= 0
       total_util = 0
     else
@@ -375,12 +376,12 @@ def show_info
       p_data[:util_cnt] += 1
       total_util = p_data[:util_total] / p_data[:util_cnt] 
     end
-    printf("%8s,限：%3d M, 均：%8.3f M,商：%3d M,應：%3d M,CU: %3d %%,TU: %3d %%, %5d ,%s\n",id,data[:spd],$port_data[id][:avg_speed] / 1000000.0,$port_data[id][:div_spd],$port_data[id][:should_spd],current_util,total_util,len,"|"*bar_len)
+    printf("%8s,限：%3d M, 均：%8.3f M,商：%3d M,應：%3d M,CU: %3d %%,TU: %3d %%, %5d ,%s\n",id,data[:spd],$port_data[id][:avg_speed] / UNIT_MEGA.to_f,$port_data[id][:div_spd],$port_data[id][:should_spd],current_util,total_util,len,"|"*bar_len)
   end
   puts "===各host speed狀況==="
   $client_host.each_pair do |id,data|
-    speed = data[:spd] / 1000000.0
-    bar_len = speed.round / 2
+    speed = data[:spd] / UNIT_MEGA.to_f
+    bar_len = (speed / CTRL_DRAW_BAR_DIV).ceil
     printf("%8s, %8.3f Mbits,速度變化：%9s,%s\n",id,speed,data[:show_cmd],"|"*bar_len)
   end
 end
