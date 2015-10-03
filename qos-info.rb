@@ -1,5 +1,5 @@
 #!/usr/bin/env ruby
-require './host-info.rb'
+require_relative 'host-info'
 
 $DEBUG = true
 # 常數
@@ -7,8 +7,11 @@ UNIT_MEGA = 2**20
 MAX_TOTAL_SPEED = 2**30 # 整體最大速度
 MAX_SPEED = 100*2**20 # 最大速度
 CTRL_DRAW_BAR_DIV = 2 * (MAX_SPEED / (100*2**20))
+CTRL_DRAW_HOST_LINE_NUMBER = 7
 MAX_SPEED_M = MAX_SPEED / UNIT_MEGA
 CLEAR_OLD = true # 是否刪除舊資料
+ENABLE_ASSIGN = false
+MAX_NOTIFICATION_INTERVAL = 0.1
 _mode = ARGV[0]
 
 # QoS資料
@@ -119,7 +122,7 @@ when /linearTopoK4N2-single/i
         "s3-eth3" => ["s4-eth3"]
     }
     STARTING_ORDER = ["s1-eth1","s2-eth3","s3-eth3","s4-eth3"]
-    default_delay = '10ms'
+    default_delay = '0ms'
     LINK_DELAY.merge!({
         "s1-eth1" => default_delay,
         "s1-eth2" => default_delay,

@@ -2,8 +2,8 @@
 
 require 'socket'
 require 'thread'
-require './qos-info.rb'
-require './host-info.rb'
+require_relative 'qos-info'
+require_relative 'host-info'
 
 $DEBUG = true
 
@@ -168,7 +168,7 @@ def process_switches
     #puts $port_data
 
     # 通知最短時間，queue越長，就可以快速通知避免爆炸
-    threshold = 0.5
+    threshold = MAX_NOTIFICATION_INTERVAL
     len = data[:len]
     if len > 500
       threshold = 0.05
@@ -262,7 +262,7 @@ def check_switch_queue(id,data)
     host_data = $client_host[host_id]
     if host_data
       cmd = ''
-      if host_data[:spd] == 0
+      if ENABLE_ASSIGN && host_data[:spd] == 0
         # 初始速度
         min_data = $host_belong_sw[host_id].min do |a,b|
           (a[:should_spd]*UNIT_MEGA - a[:total_spd]) <=> (b[:should_spd]*UNIT_MEGA - b[:total_spd])
@@ -319,7 +319,7 @@ def process_hosts
   $client_host.clone.each_pair do |id,data|
     fd = data[:fd]
     # 取得速度
-    fd.puts "spd"
+    fd.puts "spd" if !fd.closed?
     cmd = fd.gets
     case cmd
     when /close/
@@ -379,11 +379,14 @@ def show_info
     printf("%8s,限：%3d M, 均：%8.3f M,商：%3d M,應：%3d M,CU: %3d %%,TU: %3d %%, %5d ,%s\n",id,data[:spd],$port_data[id][:avg_speed] / UNIT_MEGA.to_f,$port_data[id][:div_spd],$port_data[id][:should_spd],current_util,total_util,len,"|"*bar_len)
   end
   puts "===各host speed狀況==="
+  count = CTRL_DRAW_HOST_LINE_NUMBER
   $client_host.each_pair do |id,data|
+    count -= 1
     speed = data[:spd] / UNIT_MEGA.to_f
     bar_len = (speed / CTRL_DRAW_BAR_DIV).ceil
     printf("%8s, %8.3f Mbits,速度變化：%9s,%s\n",id,speed,data[:show_cmd],"|"*bar_len)
   end
+  print "\n"*count if count > 0
 end
 
 # 通知client
