@@ -17,8 +17,13 @@ INIT_SPEED_PER_INTERVAL = INIT_SPEED_PER_SECOND * SEND_INTERVAL
 
 
 
+
+
 $host = ARGV[0]
 $port = ARGV[1].to_i
+
+
+
 
 
 def connect_server
@@ -43,7 +48,7 @@ def clear_variables
 end
 
 def reset_time
-  $next_stop_time = Time.now + rand(10) + 1
+  $next_stop_time = Time.now + rand(CLIENT_RANDOM_SEND_RANGE) + 1
 end
 
 def run_detect_thread
@@ -66,7 +71,13 @@ def run_monitor_thread
       case line
       when /spd/
         if $running
-          $controller_sock.puts "#{$speed_report * 8.0 }"
+          
+          cmd = "#{($speed_report * 8.0).ceil }"
+          if $assign_report
+            $assign_report = false
+            cmd += ' assigned'
+          end
+          $controller_sock.puts cmd
         else
           $controller_sock.puts 'close'
           break
@@ -79,6 +90,7 @@ def run_monitor_thread
         eval "$speed = ($speed * #{data[1]}).round"
       when /assign/
         spd = line.split[1].to_i
+        $assign_report = true
         $speed = spd * SEND_INTERVAL
       end
     end
@@ -98,7 +110,7 @@ def restart_client
 
 
   # sleep for a while
-  sleep rand(5)+1
+  sleep rand(CLIENT_RANDOM_SLEEP_RANGE)+1
 
   # connect to controller
   connect_controller
@@ -114,6 +126,13 @@ def restart_client
 end
 
 # ---- main ----
+if CLIENT_RANDOM_START > 0
+  sleep rand(CLIENT_RANDOM_START)
+end
+if CLIENT_RANDOM_FIXED_SEED
+  srand($port)
+end
+
 connect_server
 connect_controller
 clear_variables
@@ -137,7 +156,7 @@ begin
         cnt += 1
       end
     end
-    if Time.now > $next_stop_time
+    if CLIENT_RANDOM_ENABLED && Time.now > $next_stop_time
       restart_client
     end
     sleep SEND_INTERVAL
