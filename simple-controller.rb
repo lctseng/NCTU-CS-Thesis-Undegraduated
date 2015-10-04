@@ -389,7 +389,7 @@ def process_hosts
 end
 
 def check_max_host_upstream_switch_allow(host_id)
-  max_allow = MAX_SPEED
+  max_allow = MAX_SPEED * MAX_BW_UTIL_RATE
   # 檢查每一個上游
   $host_belong_sw[host_id].each do |port_data|
     port = port_data[:port]
@@ -405,7 +405,7 @@ def check_max_host_upstream_switch_allow(host_id)
       end
     end
     # 扣掉此switch允許的總流量(should speed)
-    remain = ($port_data[port][:should_spd] * UNIT_MEGA ) - used
+    remain = ($port_data[port][:should_spd] * UNIT_MEGA * MAX_BW_UTIL_RATE) - used
     if remain < max_allow
       max_allow = remain
     end
