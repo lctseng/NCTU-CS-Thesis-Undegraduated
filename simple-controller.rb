@@ -76,8 +76,11 @@ def write_host_command
   $client_host.clone.each_pair do |id,data|
     if !data[:cmd].empty?
       #puts "#{id} 寫入：#{data[:cmd]}"
-      data[:fd].puts data[:cmd]
-      data[:show_cmd] = data[:cmd]
+      begin
+        data[:fd].puts data[:cmd] 
+        data[:show_cmd] = data[:cmd]
+      rescue
+      end
     end
   end
 end
@@ -424,19 +427,24 @@ def show_info
     bar_len = (len / CTRL_QUEUE_DRAW_BAR_DIV).ceil
     p_data = $port_data[id]
     current_util = ($port_data[id][:total_spd]/((data[:spd] > 0 ? data[:spd] : MAX_SPEED_M)*UNIT_MEGA.to_f)*100).floor
-    if current_util <= 0
-      total_util = 0
-      recent_util = 0
-    else
+    util_data = p_data[:recent_util]
+    if current_util > 0
       p_data[:util_total] += current_util
       p_data[:util_cnt] += 1
-      total_util = p_data[:util_total] / p_data[:util_cnt] 
-      util_data = p_data[:recent_util]
       util_data << current_util
       if util_data.size > MAX_UTIL_RECORD
         util_data.shift
       end
+    end
+    if p_data[:util_cnt] > 0
+      total_util = p_data[:util_total] / p_data[:util_cnt] 
+    else
+      total_util = 0
+    end
+    if util_data.size > 0
       recent_util = util_data.reduce(:+) / util_data.size
+    else
+      recent_util = 0
     end
     limit = data[:spd] > 0 ? data[:spd] : MAX_SPEED_M
     printf("%8s,限：%3d M, 均：%8.3f M,商：%3d M,應：%3d M,CU: %3d %%,RU: %3d %%, TU: %3d %%, %5d ,%s\n",id,limit,$port_data[id][:avg_speed] / UNIT_MEGA.to_f,$port_data[id][:div_spd],$port_data[id][:should_spd],current_util,recent_util,total_util,len,"|"*bar_len)
