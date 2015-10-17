@@ -9,7 +9,7 @@ $DEBUG = true
 if ARGV.size > 0
   SERVER_OPEN = ARGV.collect{|str| str.to_i }
 else
-  SERVER_OPEN = [5001,5002,5003,5004,5005,5006,5007,5008]
+  SERVER_OPEN = [5002,5003,5004,5005,5006,5007,5008]
 end
 
 

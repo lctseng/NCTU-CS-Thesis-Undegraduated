@@ -1,14 +1,13 @@
 #!/usr/bin/env ruby 
 
 require 'socket'
-require './host-info.rb'
+require_relative 'qos-info'
 
 $DEBUG = true
 
 # 傳送資料間隔
 MONITOR_INTERVAL = 0.05
 
-SHOW_INFO = false
 
 # 紀錄最後長度
 $last_len = 0
@@ -92,7 +91,7 @@ begin
             notify_controller(data)
             # 畫圖
             bar_len = (len / 20.0).ceil
-            printf("%5d,速度上限：%3d Mbits ,Queue:%s\n",len,data[:spd],"|"*bar_len) if SHOW_INFO
+            printf("%5d,速度上限：%3d Mbits ,Queue:%s\n",len,data[:spd],"|"*bar_len) if MONITOR_SHOW_INFO
         end
 
         sleep MONITOR_INTERVAL

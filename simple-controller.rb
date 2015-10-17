@@ -15,7 +15,7 @@ UPSTREAM_INFO.default = []
 $host_belong_sw = {}
 $port_data = {}
 UPSTREAM_INFO.each_pair do |port,list|
-  data = {port: port,connect: false,avg_speed: 0.0,host_count: 0,div_spd: MAX_SPEED_M,should_spd: MAX_SPEED_M,last_should_spd: MAX_SPEED_M,new_should_spd: MAX_SPEED_M,total_spd: 0,util_total: 0,util_cnt:0,recent_util: []}
+  data = {port: port,connect: false,avg_speed: 0.0,host_count: 0,div_spd: MAX_SPEED_M,should_spd: MAX_SPEED_M,last_should_spd: MAX_SPEED_M,new_should_spd: MAX_SPEED_M,total_spd: 0,util_total: 0,util_cnt:0,recent_util: [],distribute_spd: 0,distribute_spd_cal: 0}
   list.each do |host|
     $host_belong_sw[host] = [] if !$host_belong_sw.has_key? host
     $host_belong_sw[host] << data
@@ -30,6 +30,7 @@ $client_host = {}
 
 
 $conn_mutex = Mutex.new
+$port_data_mutex = Mutex.new
 
 # 檢測client到來的thread
 thr_accept = Thread.new do
@@ -199,54 +200,54 @@ def check_switch_queue(id,data)
   mul = nil
 
   # 快速增加的條件：低於div_spd的80%
-  if len < 1 
-    add = 100
+  if len < 0 
+    add = 500
   elsif len <= 5
-    add = 20
+    add = 100
   elsif len <= 25
-    add = 10
+    add = 50
   elsif len <= 50
-    add = 5
+    add = 10
   elsif len > 50 && len <= 100
+    add = 1
+  elsif len > 100 && len <= 300
     add = 0
-  elsif len > 100 && len <= 150
-    add = -1
-  elsif len > 150 && len < 200
+  elsif len > 300 && len < 400
     if diff < 0 # 下降
       low = 3
     else
-      low = ((len - 150.0)/10.0).round + 2
+      low = ((len - 200.0)/10.0).round + 2
     end
-    add  = low * -10
-  elsif len >= 300
+    add  = low * -10 
+  #elsif len >= 300
+  #  if diff < 0 # 下降
+  #    mul = nil
+  #  else
+  #    mul = 0.9
+  #  end
+  elsif len >= 400
     if diff < 0 # 下降
       mul = nil
     else
       mul = 0.9
     end
-  elsif len >= 400
+  elsif len >= 500
     if diff < 0 # 下降
       mul = nil
     else
       mul = 0.7
     end
-  elsif len >= 500
+  elsif len >= 600
     if diff < 0 # 下降
       mul = nil
     else
       mul = 0.5
     end
-  elsif len >= 600
-    if diff < 0 # 下降
-      mul = nil
-    else
-      mul = 0.3
-    end
   elsif len >= 700
     if diff < 0 # 下降
       mul = nil
     else
-      mul = 0.2
+      mul = 0.3
     end
   elsif len >= 800
     if diff < 0 # 下降
@@ -261,70 +262,102 @@ def check_switch_queue(id,data)
       mul = 0.0
     end
   end
+  distribute_speed = $port_data[id][:distribute_spd]
+  if $port_data[id][:host_count] > 0
+    distribute_speed_byte = distribute_speed / (8 * $port_data[id][:host_count] )
+  else
+    distribute_speed_byte = 0
+  end
+
+  p_data = $port_data[id]
+  force_assign = false
+  if (p_data[:should_spd]*UNIT_MEGA - p_data[:total_spd] > p_data[:should_spd]*UNIT_MEGA*CHECK_FORCE_ASSIGN_IDLE_RATE)
+    force_assign = true
+  end
   UPSTREAM_INFO[id].each do |host_id|
     host_data = $client_host[host_id]
-    if host_data
+    if host_data 
       cmd = ''
-      if ENABLE_ASSIGN && host_data[:spd] == 0 && len < 200
+      if distribute_speed_byte > RE_DISTRIBUTE_THRESHOLD && len < 400
+
+        cmd = sprintf("interval_add %+d",distribute_speed_byte)
+        begin
+          host_data[:fd].puts cmd
+        rescue
+        end
+      end
+      host_spd = host_data[:spd]
+      if ENABLE_ASSIGN && (host_spd == 0  || force_assign) && len < 400
         # 初始速度
         min_data = $host_belong_sw[host_id].min do |a,b|
-          (a[:should_spd]*UNIT_MEGA - a[:total_spd]) <=> (b[:should_spd]*UNIT_MEGA - b[:total_spd])
+          (a[:should_spd]*UNIT_MEGA - a[:total_spd] + host_spd ) <=> (b[:should_spd]*UNIT_MEGA - b[:total_spd] + host_spd)
         end
-        max_spd = (min_data[:should_spd]*UNIT_MEGA - min_data[:total_spd])/8
+        #if distribute_speed > 0
+          #puts "來自#{id}的速度分配assign給#{host_id}，速度：#{distribute_speed / UNIT_MEGA} Mbits"
+        #  max_spd = (host_data[:spd] + distribute_speed)/8
+        #else
+          max_spd = (min_data[:should_spd]*UNIT_MEGA - min_data[:total_spd] + host_spd)/8
+        #end
         if max_spd > 0
           # 檢查最大速度
           min_div = min_data[:div_spd] * (UNIT_MEGA/8) 
           if max_spd > min_div
             max_spd = min_div
           end
+          #puts "最大速度檢查後：#{max_spd*8.0 / UNIT_MEGA} Mbits"
           # 檢查該host所屬之所有switch中，最大允許的流量
           sw_allow = check_max_host_upstream_switch_allow(host_id)
           if max_spd > sw_allow
             max_spd = sw_allow
           end
+          #puts "switch速度檢查後：#{max_spd*8.0 / UNIT_MEGA} Mbits"
           # 根據當前host數量降低assign強度
           host_count = $port_data[id][:host_count]
           if host_count > 1
             div_rate = Math.log(host_count,1.7)
             max_spd = max_spd / div_rate
           end
+          #puts "host數量調整後：#{max_spd*8.0 / UNIT_MEGA} Mbits"
 
           # 給予比率
           current = (max_spd * ASSIGN_RATE).round
+          #puts "最終指派：#{current*8.0 / UNIT_MEGA} Mbits"
           cmd = "assign #{current}"
           host_data[:expect_spd] = current
           host_data[:cmd] = cmd
           host_data[:speed_assigned] = current * 8
           host_data[:assign_locked] = true
         end
-      elsif mul
-        current = host_data[:spd] * mul
-        if current < host_data[:expect_spd]
-          cmd = host_cmd_generate("mul",mul)
-          host_data[:expect_spd] = current
-          host_data[:cmd] = cmd
-        end
-      elsif add
-        # 平均速度檢查
-        final_add = add
-        curr_spd = host_data[:spd]
-        if $host_belong_sw[host_id].any? {|data| (curr_spd - data[:avg_speed]) > data[:avg_speed] * 0.05 &&
-                                          (curr_spd > data[:div_spd]*UNIT_MEGA )}
-          final_add -= 100
-        end
-        # 檢查接近滿速 
-        if host_data[:spd] > ($host_belong_sw[host_id][0][:div_spd] * UNIT_MEGA  * 0.9)
-          final_add = 10 if final_add > 10
-        end
-        # 加法均分 
-        final_add = ( final_add / $port_data[id][:host_count]).round
+      else 
+        if mul
+          current = host_data[:spd] * mul
+          if current < host_data[:expect_spd]
+            cmd = host_cmd_generate("mul",mul)
+            host_data[:expect_spd] = current
+            host_data[:cmd] = cmd
+          end
+        elsif add
+          # 平均速度檢查
+          final_add = add
+          curr_spd = host_data[:spd]
+          if $host_belong_sw[host_id].any? {|data| (curr_spd - data[:avg_speed]) > data[:avg_speed] * 0.05 &&
+                                            (curr_spd > data[:div_spd]*UNIT_MEGA )}
+            #final_add -= 10
+          end
+          # 檢查接近滿速 
+          if host_data[:spd] > ($host_belong_sw[host_id][0][:div_spd] * UNIT_MEGA  * 0.95)
+            final_add = 10 if final_add > 10
+          end
+          # 加法均分 
+          final_add = ( final_add / $port_data[id][:host_count]).round
 
-        #puts "來自#{id}的指令：#{final_add}"
-        current = host_data[:spd] + final_add
-        if current < host_data[:expect_spd]
-          cmd = host_cmd_generate("add",sprintf("%+d",final_add))
-          host_data[:expect_spd] = current
-          host_data[:cmd] = cmd
+          #puts "來自#{id}的指令：#{final_add}"
+          current = host_data[:spd] + final_add
+          if current < host_data[:expect_spd]
+            cmd = host_cmd_generate("add",sprintf("%+d",final_add))
+            host_data[:expect_spd] = current
+            host_data[:cmd] = cmd
+          end
         end
       end
       # 指令覆蓋，取預測結果最低者
@@ -333,25 +366,41 @@ def check_switch_queue(id,data)
       #puts "最終#{host_id}期望指令：#{host_data[:cmd]}"
     end
   end
+  $port_data_mutex.synchronize do 
+    $port_data[id][:distribute_spd] -= distribute_speed
+  end
 end
 
+
+def close_host(id)
+  data = $client_host[id]
+  fd = data[:fd]
+  fd.close
+  $conn_mutex.synchronize do
+    $client_host.delete id
+  end
+  #puts "#{id}中斷連線，剩餘速度：#{pack[:spd]}"
+  $host_belong_sw[id].each do |data|
+    data[:host_count] -= 1
+  end
+  distribute_host_speed(id,data) if ENABLE_REDISTRIBUTE
+
+end
 
 def process_hosts
   port_data = {}
   $client_host.clone.each_pair do |id,data|
     fd = data[:fd]
     # 取得速度
-    fd.puts "spd" if !fd.closed?
-    cmd = fd.gets
+    begin
+      fd.puts "spd"
+      cmd = fd.gets
+    rescue
+      close_host(id)
+    end
     case cmd
     when /close/
-      fd.close
-      $conn_mutex.synchronize do
-        $client_host.delete id
-      end
-      $host_belong_sw[id].each do |data|
-        data[:host_count] -= 1
-      end
+      close_host(id)
     when /(\d+)(.*)/i
       # 更新spd
       spd = data[:spd] = $1.to_i
@@ -388,8 +437,27 @@ def process_hosts
     if data[:host_count] <= 0
       data[:avg_speed] = 0.0
     end
+    if data[:distribute_spd_cal] > 0
+      $port_data_mutex.synchronize do 
+        data[:distribute_spd] = data[:distribute_spd_cal]
+      end
+      data[:distribute_spd_cal] = 0
+    end
   end
 end
+
+
+def distribute_host_speed(id,pack)
+  # 找出最下游switch
+  main_port_data = $host_belong_sw[id].find { |port_data| port_data[:port] == STARTING_ORDER[0] }
+  if main_port_data[:host_count] > 0
+    # 算可分得速度(in bits)
+    spd_added = (pack[:spd].to_f * RE_DISTRIBUTE_RATE ).round
+    # 加入assign等待
+    main_port_data[:distribute_spd_cal] += spd_added 
+  end
+end
+
 
 def check_max_host_upstream_switch_allow(host_id)
   max_allow = MAX_SPEED * MAX_BW_UTIL_RATE
@@ -426,8 +494,14 @@ def show_info
     len = data[:len] 
     bar_len = (len / CTRL_QUEUE_DRAW_BAR_DIV).ceil
     p_data = $port_data[id]
-    current_util = ($port_data[id][:total_spd]/((data[:spd] > 0 ? data[:spd] : MAX_SPEED_M)*UNIT_MEGA.to_f)*100).floor
     util_data = p_data[:recent_util]
+    if p_data[:host_count] > 0
+      #should_max = p_data[:host_count] * p_data[:div_spd] * UNIT_MEGA.to_f
+      should_max = (data[:spd] > 0 ? data[:spd] : MAX_SPEED_M)*UNIT_MEGA.to_f
+      current_util = (($port_data[id][:total_spd]/should_max)*100).floor
+    else
+      current_util = 0
+    end
     if current_util > 0
       p_data[:util_total] += current_util
       p_data[:util_cnt] += 1
@@ -447,7 +521,7 @@ def show_info
       recent_util = 0
     end
     limit = data[:spd] > 0 ? data[:spd] : MAX_SPEED_M
-    printf("%8s,限：%3d M, 均：%8.3f M,商：%3d M,應：%3d M,CU: %3d %%,RU: %3d %%, TU: %3d %%, %5d ,%s\n",id,limit,$port_data[id][:avg_speed] / UNIT_MEGA.to_f,$port_data[id][:div_spd],$port_data[id][:should_spd],current_util,recent_util,total_util,len,"|"*bar_len)
+    printf("%8s,限：%3d M, 均：%8.3f M,總：%8.3f M ,商：%3d M,應：%3d M,CU: %3d %%,RU: %3d %%, TU: %3d %%, %5d ,%s\n",id,limit,$port_data[id][:avg_speed] / UNIT_MEGA.to_f,$port_data[id][:total_spd] / UNIT_MEGA.to_f,$port_data[id][:div_spd],$port_data[id][:should_spd],current_util,recent_util,total_util,len,"|"*bar_len)
   end
   puts "===各host speed狀況==="
   count = CTRL_DRAW_HOST_LINE_NUMBER
@@ -475,14 +549,18 @@ def notify_client(client,len)
 end
 # 處理switch monitor 
 thr_switch = Thread.new do
-  loop do
-    process_switches
+  if ENABLE_CONTROL
+    loop do
+      process_switches
+    end
   end
 end
 # 處理host 
 thr_host = Thread.new do
-  loop do
-    process_hosts
+  if ENABLE_CONTROL
+    loop do
+      process_hosts
+    end
   end
 end
 # 顯示資訊 

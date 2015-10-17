@@ -7,12 +7,15 @@ require_relative 'qos-info'
 
 $DEBUG = true
 
-PACKET_SIZE = 1450
 SEND_INTERVAL = 0.001
-if ENABLE_ASSIGN
-  INIT_SPEED_PER_SECOND = 0
+if ENABLE_CONTROL
+  if ENABLE_ASSIGN
+    INIT_SPEED_PER_SECOND = 0
+  else
+    INIT_SPEED_PER_SECOND = 8*1000
+  end
 else
-  INIT_SPEED_PER_SECOND = 8*1000 # 80 Kbit (10 KB)
+  INIT_SPEED_PER_SECOND = 2 * MAX_SPEED / 8
 end
 INIT_SPEED_PER_INTERVAL = INIT_SPEED_PER_SECOND * SEND_INTERVAL
 
@@ -29,8 +32,14 @@ $pattern_size_ready = ConditionVariable.new
 
 
 def connect_server
-  $sender = UDPSocket.new
-  $sender.connect($host,$port)
+  case DATA_PROTOCOL
+  when :tcp
+    $sender = TCPSocket.new($host,$port)
+  when :udp
+    $sender = UDPSocket.new
+    $sender.connect($host,$port)
+
+  end
 end
 def connect_controller
   puts "連接Controller中..."
@@ -87,32 +96,39 @@ end
 def run_monitor_thread
   $thr_monitor.exit if $thr_monitor
   # 連接監測器
-  $thr_monitor = Thread.new do
-    while line = $controller_sock.gets
-      case line
-      when /spd/
-        if $running
+  if ENABLE_CONTROL
+    $thr_monitor = Thread.new do
+      while line = $controller_sock.gets
+        case line
+        when /spd/
+          if $running
 
-          cmd = "#{($speed_report * 8.0).ceil }"
-          if $assign_report
-            $assign_report = false
-            cmd += ' assigned'
+            cmd = "#{($speed_report * 8.0).ceil }"
+            if $assign_report
+              $assign_report = false
+              cmd += ' assigned'
+            end
+            $controller_sock.puts cmd
+          else
+            $controller_sock.puts 'close'
+            break
           end
-          $controller_sock.puts cmd
-        else
-          $controller_sock.puts 'close'
-          break
+        when /interval_add/
+          data = line.split
+          puts "重新分配加速：#{sprintf("%+d",data[1].to_i*SEND_INTERVAL)}"
+          eval "$speed = $speed #{sprintf("%+d",data[1].to_i*SEND_INTERVAL)}"
+        when /add/
+          data = line.split
+          eval "$speed = $speed #{data[1]}"
+        when /mul/
+          data = line.split
+          eval "$speed = ($speed * #{data[1]}).round"
+        when /assign/
+          spd = line.split[1].to_i
+          #puts "速度被指派為#{spd*8.0 / UNIT_MEGA} Mbits"
+          $assign_report = true
+          $speed = spd * SEND_INTERVAL
         end
-      when /add/
-        data = line.split
-        eval "$speed = $speed #{data[1]}"
-      when /mul/
-        data = line.split
-        eval "$speed = ($speed * #{data[1]}).round"
-      when /assign/
-        spd = line.split[1].to_i
-        $assign_report = true
-        $speed = spd * SEND_INTERVAL
       end
     end
   end
@@ -120,40 +136,41 @@ end
 
 def run_pattern_thread
   $thr_pattern.exit if $thr_pattern
-  $thr_pattern = Thread.new do
-    File.open("pattern_#{$port}") do |f|
-      new_added = 0
-      while line = f.gets
-        puts "讀取pattern：#{line}"
-        if line =~ /sleep (.*)/
-          if new_added > 0
-            printf("新增傳輸需求：%.6f MB(%d bytes)\n",new_added.to_f/UNIT_MEGA,new_added)
-            $size_remain_mutex.synchronize do
-              $size_remaining += new_added
-              $pattern_size_ready.signal
-            end
-            new_added = 0
+  if CLIENT_RANDOM_MODE == :pattern
+    $thr_pattern = Thread.new do
+      File.open("pattern_#{$port}") do |f|
+        new_added = 0
+        while line = f.gets
+          puts "讀取pattern：#{line}"
+          if line =~ /sleep (.*)/
+            if new_added > 0
+              printf("新增傳輸需求：%.6f MB(%d bytes)\n",new_added.to_f/UNIT_MEGA,new_added)
+              $size_remain_mutex.synchronize do
+                $size_remaining += new_added
+                $pattern_size_ready.signal
+              end
+              new_added = 0
 
+            end
+            sleep_time = $1.to_f
+            sleep sleep_time
+          else
+            new_added += line.to_i
           end
-          sleep_time = $1.to_f
-          sleep sleep_time
-        else
-          new_added += line.to_i
         end
       end
+      puts "pattern結束，sleep forever"
+      loop do
+        sleep
+      end
     end
-    puts "pattern結束，sleep forever"
-    loop do
-      sleep
-    end
-
   end
 end
 
 def check_restart?
   case CLIENT_RANDOM_MODE
   when :time
-    return CLIENT_RANDOM_ENABLED && Time.now > $next_stop_time
+    return Time.now > $next_stop_time
   when :size,:pattern
     return $size_remaining <= 0  
   end
@@ -167,9 +184,13 @@ def wait_for_next
   when :time,:size
     sleep rand(CLIENT_RANDOM_SLEEP_RANGE)+1
   when :pattern
-    $size_remain_mutex.synchronize do 
-      $pattern_size_ready.wait($size_remain_mutex)
+    $size_remain_mutex.synchronize do
+      if $size_remaining <= 0
+        puts "等待傳輸需求..."
+        $pattern_size_ready.wait($size_remain_mutex)
+      end
     end
+    puts "已取得傳輸要求！"
   end
 end
 
@@ -214,6 +235,8 @@ end
 connect_server
 connect_controller
 clear_variables
+$trans_time = 0.0
+$trans_size = 0.0
 case CLIENT_RANDOM_MODE
 when :time
   reset_time
@@ -228,6 +251,7 @@ run_pattern_thread
 
 begin
   cnt = 0
+  start_time = Time.now
   loop do
     $delay_send += $speed
     if $delay_send >= PACKET_SIZE
@@ -235,11 +259,12 @@ begin
       $delay_send %= PACKET_SIZE
       for i in 0...pkts
         info = "#{cnt} "
-        data =  info + "0" * (PACKET_SIZE - info.size)
+        data =  info + "1" * (PACKET_SIZE - info.size)
         send = $sender.send(data,0)
         $total_send += send
         $interval_send += send
         $this_time_send += send
+        $trans_size += send
         cnt += 1
         # 檢查離開
         if CLIENT_RANDOM_MODE == :size || CLIENT_RANDOM_MODE == :pattern
@@ -253,18 +278,25 @@ begin
         end
       end
     end
+    if CLIENT_STOP_SIZE_BYTE > 0 && CLIENT_RANDOM_MODE != :pattern && $trans_size >= CLIENT_STOP_SIZE_BYTE
+      raise SystemExit
+    end
     if CLIENT_RANDOM_MODE && check_restart?
+      $trans_time += (Time.now - start_time)
       restart_client
+      start_time = Time.now
     end
     sleep SEND_INTERVAL
   end
-rescue SystemExit, Interrupt 
+rescue SystemExit, Interrupt
+  $trans_time += (Time.now - start_time)
+  $sender.send("reset #{'0'*(PACKET_SIZE - 6)}",0)
   $running = false
   $thr_monitor.exit if $thr_monitor
   $thr_detect.exit if $thr_detect
   $thr_pattern.exit if $thr_pattern
   $controller_sock.puts "close" if !$controller_sock.closed? 
   puts "終止傳輸，再按一次Ctrl+C結束程式"
-  printf("總共傳輸：%.6f Mbit\n",($total_send*8.0)/UNIT_MEGA )
+  printf("總共傳輸：%.6f Mbit，花費在傳輸上的時間：%.6f 秒，平均速度：%.6f Mbits\n",($trans_size*8.0)/UNIT_MEGA, $trans_time, ($trans_size*8.0)/($trans_time*UNIT_MEGA) )
 end
 sleep
