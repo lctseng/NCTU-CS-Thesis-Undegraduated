@@ -2,6 +2,7 @@
 
 require 'socket'
 require 'thread'
+require 'fileutils'
 require_relative 'qos-info'
 require_relative 'host-info'
 
@@ -9,13 +10,13 @@ $DEBUG = true
 
 SHOW_INTERVAL = 0.1
 UPSTREAM_INFO.default = []
-
+BASE_TIME = Time.now
 
 # 自動產生host歸屬表
 $host_belong_sw = {}
 $port_data = {}
 UPSTREAM_INFO.each_pair do |port,list|
-  data = {port: port,connect: false,avg_speed: 0.0,host_count: 0,div_spd: MAX_SPEED_M,should_spd: MAX_SPEED_M,last_should_spd: MAX_SPEED_M,new_should_spd: MAX_SPEED_M,total_spd: 0,util_total: 0,util_cnt:0,recent_util: [],distribute_spd: 0,distribute_spd_cal: 0}
+  data = {port: port,log_name: sprintf(SWITCH_LOG_NAME_FORMAT,port),log_queue: [],connect: false,avg_speed: 0.0,host_count: 0,div_spd: MAX_SPEED_M,should_spd: MAX_SPEED_M,last_should_spd: MAX_SPEED_M,new_should_spd: MAX_SPEED_M,total_spd: 0,util_total: 0,util_cnt:0,recent_util: [],distribute_spd: 0,distribute_spd_cal: 0}
   list.each do |host|
     $host_belong_sw[host] = [] if !$host_belong_sw.has_key? host
     $host_belong_sw[host] << data
@@ -41,6 +42,8 @@ thr_accept = Thread.new do
     case type
     when /switch/
       data = {fd:c, len: 0,last_len: 0,spd: 0,last_spd: 0, last_mod: Time.at(0)}
+      # 移除記錄檔
+      FileUtils.rm_f $port_data[id][:log_name]
       $conn_mutex.synchronize do
         $client_sw[id] = data
       end
@@ -521,7 +524,22 @@ def show_info
       recent_util = 0
     end
     limit = data[:spd] > 0 ? data[:spd] : MAX_SPEED_M
-    printf("%8s,限：%3d M, 均：%8.3f M,總：%8.3f M ,商：%3d M,應：%3d M,CU: %3d %%,RU: %3d %%, TU: %3d %%, %5d ,%s\n",id,limit,$port_data[id][:avg_speed] / UNIT_MEGA.to_f,$port_data[id][:total_spd] / UNIT_MEGA.to_f,$port_data[id][:div_spd],$port_data[id][:should_spd],current_util,recent_util,total_util,len,"|"*bar_len)
+    total_spd = $port_data[id][:total_spd] # in bits
+    avg_spd = $port_data[id][:avg_speed] # in bits
+    log_info = "#{Time.now - BASE_TIME} #{total_spd.to_i} #{avg_spd.to_i} #{current_util} #{recent_util} #{total_util} #{len}"
+    log_queue = $port_data[id][:log_queue]
+    log_queue << log_info
+    if log_queue.size > 10
+      File.open($port_data[id][:log_name],'a') do |f|
+        log_queue.each do |line|
+          f.puts line
+        end
+      end
+      log_queue.clear
+    end
+
+    
+    printf("%8s,限：%3d M, 均：%8.3f M,總：%8.3f M ,商：%3d M,應：%3d M,CU: %3d %%,RU: %3d %%, TU: %3d %%, %5d ,%s\n",id,limit,avg_spd / UNIT_MEGA.to_f,total_spd / UNIT_MEGA.to_f,$port_data[id][:div_spd],$port_data[id][:should_spd],current_util,recent_util,total_util,len,"|"*bar_len)
   end
   puts "===各host speed狀況==="
   count = CTRL_DRAW_HOST_LINE_NUMBER

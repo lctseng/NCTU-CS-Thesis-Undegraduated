@@ -35,6 +35,13 @@ CLIENT_RANDOM_SEND_SIZE_RANGE = 100000000
 CLIENT_RANDOM_FIXED_SEED = true
 CLIENT_RANDOM_START = 0
 CLIENT_STOP_SIZE_BYTE = 200*2**20
+CLIENT_PATTERN_NAME_FORMAT = "pattern/client_%s.pattern"
+
+# LOG 設置
+HOST_LOG_NAME_FORMAT = "log/host_speed_%s.log"
+HOST_LOG_NAME_JSON_FORMAT = "json/host_speed_%s.json"
+SWITCH_LOG_NAME_FORMAT = "log/switch_info_%s.log"
+SWITCH_LOG_NAME_JSON_FORMAT = "json/switch_%s_%s.json"
 
 _mode = ARGV[0]
 

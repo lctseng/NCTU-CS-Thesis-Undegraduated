@@ -1,4 +1,14 @@
+# Temp files
 .*.swp
 .*.swo
 *.sock
-pattern_*
+
+# Pattern files
+client_*.pattern
+
+# Log and JSON files
+host_speed*.log
+host_speed*.json
+switch_info*.log
+switch_*.json
+*.json.tar.gz

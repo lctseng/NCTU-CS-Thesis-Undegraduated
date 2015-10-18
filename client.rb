@@ -2,6 +2,7 @@
 
 require 'socket'
 require 'thread'
+require 'fileutils'
 require_relative 'host-info'
 require_relative 'qos-info'
 
@@ -27,8 +28,9 @@ $host = ARGV[0]
 $port = ARGV[1].to_i
 $size_remain_mutex = Mutex.new
 $pattern_size_ready = ConditionVariable.new
+$log_name=sprintf(HOST_LOG_NAME_FORMAT,$port)
 
-
+FileUtils.rm_f $log_name
 
 
 def connect_server
@@ -82,12 +84,19 @@ def run_detect_thread
   $thr_detect = Thread.new do
     loop do
       $speed_report = $interval_send
-      remain_str = ''
-      case CLIENT_RANDOM_MODE
-      when :size,:pattern
-        remain_str = sprintf("還需傳輸%.6f MB(%d bytes)，",$size_remaining/UNIT_MEGA.to_f,$size_remaining)
+      # 紀錄檔案
+      File.open($log_name,'a') do |f|
+        f.puts $interval_send
       end
-      printf("總共傳輸：%.6f MB，%s當前速度：%.3f Mbit/s\n",$total_send.to_f/UNIT_MEGA,remain_str,$interval_send * 8.0 /UNIT_MEGA )
+      if $running
+      # 顯示文字
+        remain_str = ''
+        case CLIENT_RANDOM_MODE
+        when :size,:pattern
+          remain_str = sprintf("還需傳輸%.6f MB(%d bytes)，",$size_remaining/UNIT_MEGA.to_f,$size_remaining)
+        end
+        printf("總共傳輸：%.6f MB，%s當前速度：%.3f Mbit/s\n",$total_send.to_f/UNIT_MEGA,remain_str,$interval_send * 8.0 /UNIT_MEGA )
+      end
       $interval_send = 0
       sleep 1
     end
@@ -138,7 +147,7 @@ def run_pattern_thread
   $thr_pattern.exit if $thr_pattern
   if CLIENT_RANDOM_MODE == :pattern
     $thr_pattern = Thread.new do
-      File.open("pattern_#{$port}") do |f|
+      File.open(sprintf(CLIENT_PATTERN_NAME_FORMAT,$port)) do |f|
         new_added = 0
         while line = f.gets
           puts "讀取pattern：#{line}"
@@ -160,6 +169,7 @@ def run_pattern_thread
         end
       end
       puts "pattern結束，sleep forever"
+      $thr_detect.exit if $thr_detect
       loop do
         sleep
       end
@@ -199,7 +209,6 @@ def restart_client
   $running = false
 
   # stop threads
-  $thr_detect.exit if $thr_detect
   $thr_monitor.join if $thr_monitor
 
   # close servers 
@@ -220,7 +229,6 @@ def restart_client
   reset_random
 
   # restart threads
-  run_detect_thread
   run_monitor_thread
 end
 
@@ -235,6 +243,7 @@ end
 connect_server
 connect_controller
 clear_variables
+$stop_count_time = false
 $trans_time = 0.0
 $trans_size = 0.0
 case CLIENT_RANDOM_MODE
@@ -251,7 +260,7 @@ run_pattern_thread
 
 begin
   cnt = 0
-  start_time = Time.now
+  $start_time = Time.now
   loop do
     $delay_send += $speed
     if $delay_send >= PACKET_SIZE
@@ -282,14 +291,16 @@ begin
       raise SystemExit
     end
     if CLIENT_RANDOM_MODE && check_restart?
-      $trans_time += (Time.now - start_time)
+      $stop_time = Time.now
+      $trans_time += ( $stop_time - $start_time) if !$stop_count_time
+      $start_time = $stop_time
       restart_client
-      start_time = Time.now
+      $start_time = Time.now
     end
     sleep SEND_INTERVAL
   end
 rescue SystemExit, Interrupt
-  $trans_time += (Time.now - start_time)
+  $trans_time += ($stop_time - $start_time) if !$stop_count_time
   $sender.send("reset #{'0'*(PACKET_SIZE - 6)}",0)
   $running = false
   $thr_monitor.exit if $thr_monitor
