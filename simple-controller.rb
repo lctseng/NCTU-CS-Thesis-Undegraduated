@@ -222,12 +222,12 @@ def check_switch_queue(id,data)
       low = ((len - 200.0)/10.0).round + 2
     end
     add  = low * -10 
-  #elsif len >= 300
-  #  if diff < 0 # 下降
-  #    mul = nil
-  #  else
-  #    mul = 0.9
-  #  end
+    #elsif len >= 300
+    #  if diff < 0 # 下降
+    #    mul = nil
+    #  else
+    #    mul = 0.9
+    #  end
   elsif len >= 400
     if diff < 0 # 下降
       mul = nil
@@ -296,10 +296,10 @@ def check_switch_queue(id,data)
           (a[:should_spd]*UNIT_MEGA - a[:total_spd] + host_spd ) <=> (b[:should_spd]*UNIT_MEGA - b[:total_spd] + host_spd)
         end
         #if distribute_speed > 0
-          #puts "來自#{id}的速度分配assign給#{host_id}，速度：#{distribute_speed / UNIT_MEGA} Mbits"
+        #puts "來自#{id}的速度分配assign給#{host_id}，速度：#{distribute_speed / UNIT_MEGA} Mbits"
         #  max_spd = (host_data[:spd] + distribute_speed)/8
         #else
-          max_spd = (min_data[:should_spd]*UNIT_MEGA - min_data[:total_spd] + host_spd)/8
+        max_spd = (min_data[:should_spd]*UNIT_MEGA - min_data[:total_spd] + host_spd)/8
         #end
         if max_spd > 0
           # 檢查最大速度
@@ -345,7 +345,7 @@ def check_switch_queue(id,data)
           curr_spd = host_data[:spd]
           if $host_belong_sw[host_id].any? {|data| (curr_spd - data[:avg_speed]) > data[:avg_speed] * 0.05 &&
                                             (curr_spd > data[:div_spd]*UNIT_MEGA )}
-            #final_add -= 10
+            final_add -= CTRL_BALANCE_DECREASE_VALUE
           end
           # 檢查接近滿速 
           if host_data[:spd] > ($host_belong_sw[host_id][0][:div_spd] * UNIT_MEGA  * 0.95)
@@ -538,7 +538,7 @@ def show_info
       log_queue.clear
     end
 
-    
+
     printf("%8s,限：%3d M, 均：%8.3f M,總：%8.3f M ,商：%3d M,應：%3d M,CU: %3d %%,RU: %3d %%, TU: %3d %%, %5d ,%s\n",id,limit,avg_spd / UNIT_MEGA.to_f,total_spd / UNIT_MEGA.to_f,$port_data[id][:div_spd],$port_data[id][:should_spd],current_util,recent_util,total_util,len,"|"*bar_len)
   end
   puts "===各host speed狀況==="
@@ -601,5 +601,14 @@ rescue SystemExit, Interrupt
   ($client_sw.values + $client_host.values).each do |data|
     c = data[:fd]
     c.close if !c.closed?
+  end
+  # 將剩餘的log檔案寫入 
+  $port_data.each do |id,data| 
+    log_queue = data[:log_queue]
+    File.open(data[:log_name],'a') do |f|
+      log_queue.each do |line|
+        f.puts line
+      end
+    end
   end
 end

@@ -10,6 +10,11 @@ def shell_exec(cmd,show = false)
   system cmd
 end
 
+# 寫入設定
+File.open("last_setup_mode.tmp",'w') do |f|
+  f.puts ARGV[0]
+end
+
 # 清除舊的QoS
 if CLEAR_OLD
   puts "** 清除舊有QoS資訊 **"
