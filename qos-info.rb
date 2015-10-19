@@ -24,9 +24,10 @@ ASSIGN_RATE = 1.0
 CHECK_FORCE_ASSIGN_IDLE_RATE = 0.5
 MAX_UTIL_RECORD = 300
 ENABLE_REDISTRIBUTE = true
-RE_DISTRIBUTE_RATE = 0.0
+RE_DISTRIBUTE_RATE = 0.5
 RE_DISTRIBUTE_THRESHOLD = 10000
 CTRL_BALANCE_DECREASE_VALUE = 1
+CTRL_ASSIGN_BASELINE = 1000
 
 # Client端設置
 CLIENT_RANDOM_MODE = :pattern
@@ -35,7 +36,7 @@ CLIENT_RANDOM_SEND_TIME_RANGE = 10
 CLIENT_RANDOM_SEND_SIZE_RANGE = 100000000
 CLIENT_RANDOM_FIXED_SEED = true
 CLIENT_RANDOM_START = 0
-CLIENT_STOP_SIZE_BYTE = 200*2**20
+CLIENT_STOP_SIZE_BYTE = 2000*2**20
 CLIENT_PATTERN_NAME_FORMAT = "pattern/client_%s.pattern"
 
 # LOG 設置
@@ -44,7 +45,7 @@ HOST_LOG_NAME_JSON_FORMAT = "json/host_speed_%s.json"
 SWITCH_LOG_NAME_FORMAT = "log/switch_info_%s.log"
 SWITCH_LOG_NAME_JSON_FORMAT = "json/switch_%s_%s.json"
 
-_mode = ARGV[0]
+
 
 # QoS資料
 QOS_INFO = {}
@@ -53,6 +54,20 @@ def add_qos_info(sw,eth,ingress_list)
 end
 
 LINK_DELAY = {}
+
+
+
+_mode = ARGV[0]
+
+if _mode &&  _mode =~ /__last__/i
+  File.open("last_setup_mode.tmp") do |f|
+    str = f.gets
+    _mode = str if str
+  end
+end
+
+
+
 
 case _mode
 when /simple/

@@ -12,3 +12,6 @@ host_speed*.json
 switch_info*.log
 switch_*.json
 *.json.tar.gz
+
+# Temp files
+tmp/

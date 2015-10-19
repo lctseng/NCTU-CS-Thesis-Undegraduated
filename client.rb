@@ -85,11 +85,13 @@ def run_detect_thread
     loop do
       $speed_report = $interval_send
       # 紀錄檔案
-      File.open($log_name,'a') do |f|
-        f.puts $interval_send
+      if $start_logging
+        File.open($log_name,'a') do |f|
+          f.puts $interval_send
+        end
       end
       if $running
-      # 顯示文字
+        # 顯示文字
         remain_str = ''
         case CLIENT_RANDOM_MODE
         when :size,:pattern
@@ -147,11 +149,13 @@ def run_pattern_thread
   $thr_pattern.exit if $thr_pattern
   if CLIENT_RANDOM_MODE == :pattern
     $thr_pattern = Thread.new do
+      new_added = 0
       File.open(sprintf(CLIENT_PATTERN_NAME_FORMAT,$port)) do |f|
-        new_added = 0
         while line = f.gets
           puts "讀取pattern：#{line}"
-          if line =~ /sleep (.*)/
+          if line =~ /^[ \t]*#/ # comments
+            next
+          elsif line =~ /sleep (.*)/
             if new_added > 0
               printf("新增傳輸需求：%.6f MB(%d bytes)\n",new_added.to_f/UNIT_MEGA,new_added)
               $size_remain_mutex.synchronize do
@@ -168,8 +172,17 @@ def run_pattern_thread
           end
         end
       end
+      if new_added > 0
+        printf("新增傳輸需求：%.6f MB(%d bytes)\n",new_added.to_f/UNIT_MEGA,new_added)
+        $size_remain_mutex.synchronize do
+          $size_remaining += new_added
+          $pattern_size_ready.signal
+        end
+        new_added = 0
+      end
+
       puts "pattern結束，sleep forever"
-      $thr_detect.exit if $thr_detect
+      $start_logging = false
       loop do
         sleep
       end
@@ -246,6 +259,7 @@ clear_variables
 $stop_count_time = false
 $trans_time = 0.0
 $trans_size = 0.0
+$start_logging = true
 case CLIENT_RANDOM_MODE
 when :time
   reset_time
@@ -300,6 +314,7 @@ begin
     sleep SEND_INTERVAL
   end
 rescue SystemExit, Interrupt
+  $stop_time = Time.now if !$stop_time
   $trans_time += ($stop_time - $start_time) if !$stop_count_time
   $sender.send("reset #{'0'*(PACKET_SIZE - 6)}",0)
   $running = false

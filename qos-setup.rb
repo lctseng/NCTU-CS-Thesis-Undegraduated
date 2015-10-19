@@ -11,8 +11,10 @@ def shell_exec(cmd,show = false)
 end
 
 # 寫入設定
-File.open("last_setup_mode.tmp",'w') do |f|
-  f.puts ARGV[0]
+if ARGV[0] !~ /__last__/i
+  File.open("last_setup_mode.tmp",'w') do |f|
+    f.puts ARGV[0]
+  end
 end
 
 # 清除舊的QoS

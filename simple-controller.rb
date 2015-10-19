@@ -206,57 +206,77 @@ def check_switch_queue(id,data)
   if len < 0 
     add = 500
   elsif len <= 5
-    add = 100
-  elsif len <= 25
-    add = 50
-  elsif len <= 50
-    add = 10
-  elsif len > 50 && len <= 100
-    add = 1
-  elsif len > 100 && len <= 300
-    add = 0
-  elsif len > 300 && len < 400
     if diff < 0 # 下降
-      low = 3
+      add = 100
     else
-      low = ((len - 200.0)/10.0).round + 2
+      add = 50
     end
-    add  = low * -10 
+  elsif len <= 25
+    if diff < 0 # 下降
+      add = 50
+    else 
+      add = 0
+    end
+  elsif len <= 50
+    if diff < 0 # 下降
+      add = 10
+    else
+      add = 0
+    end
+  elsif len > 50 && len <= 100
+    if diff < 0 # 下降
+      add = 1
+    else 
+      add = -1
+    end
+  elsif len > 100 && len <= 300
+    if diff < 0 # 下降
+      add = 0
+    else
+      add = -1
+    end
+  elsif len > 300 && len < 500
+    if diff < 0 # 下降
+      add = -1
+    else
+      low = ((len - 300.0)/10.0).round + 2
+      add  = low * -10 
+    end
     #elsif len >= 300
     #  if diff < 0 # 下降
     #    mul = nil
     #  else
     #    mul = 0.9
     #  end
-  elsif len >= 400
-    if diff < 0 # 下降
-      mul = nil
-    else
-      mul = 0.9
-    end
+  #elsif len >= 400
+  #  if diff < 0 # 下降
+  #    mul = 0.99
+  #  else
+  #    mul = 0.97
+  #  end
   elsif len >= 500
     if diff < 0 # 下降
-      mul = nil
+      mul = 0.95
     else
       mul = 0.7
     end
   elsif len >= 600
     if diff < 0 # 下降
-      mul = nil
+      mul = 0.9
     else
-      mul = 0.5
+      mul = 0.3
     end
   elsif len >= 700
     if diff < 0 # 下降
       mul = nil
     else
-      mul = 0.3
+      mul = 0.1
     end
   elsif len >= 800
     if diff < 0 # 下降
       mul = nil
     else
-      mul = 0.1
+      mul = 0.05
     end
   elsif len >= 900
     if diff < 0 # 下降
@@ -312,6 +332,9 @@ def check_switch_queue(id,data)
           sw_allow = check_max_host_upstream_switch_allow(host_id)
           if max_spd > sw_allow
             max_spd = sw_allow
+          end
+          if max_spd <= 0
+            max_spd = CTRL_ASSIGN_BASELINE
           end
           #puts "switch速度檢查後：#{max_spd*8.0 / UNIT_MEGA} Mbits"
           # 根據當前host數量降低assign強度

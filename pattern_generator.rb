@@ -4,6 +4,7 @@ require_relative 'qos-info'
 out_name = ARGV[0]
 pattern_time = ARGV[1].to_f
 
+PATTERN_POOL_PATH = "pattern_pool"
 
 def write_sleep(file,pattern_time,sleep_time)
   if sleep_time > 0
@@ -144,12 +145,49 @@ def generate_bursty_pattern(f,pattern_time)
   end
 end
 
+
+def generate_by_patching_files(f,pattern_time)
+  # 整理pattern_pool中各檔案以及其持續時間(最短0.1)
+  patterns = []
+  Dir.foreach(PATTERN_POOL_PATH) do |f_name|
+    f_name.force_encoding 'UTF-8'
+    full_name = "#{PATTERN_POOL_PATH}/#{f_name}"
+    next if !File.file?(full_name)
+    content = ''
+    time = 0.0
+    File.open(full_name) do |f|
+      while f.gets
+        content += $_
+        if ~ /sleep (\d+(\.\d+)?)/i
+          time += $1.to_f
+        end
+      end
+    end
+    if time <= 0.0
+      content += "sleep 0.1\n"
+      time = 0.1
+    end
+    patterns << [f_name,content,time]
+  end
+  # 開始湊數值
+  while pattern_time > 0
+    pattern = patterns.sample
+    f.puts "# from: #{pattern[0]}"
+    f.print pattern[1]
+    pattern_time -= pattern[2]
+  end
+
+
+
+end
+
 def generate_pattern(out_name,pattern_time)
   File.open(sprintf(CLIENT_PATTERN_NAME_FORMAT,out_name),'w') do |f|
     #generate_default_pattern(f,pattern_time)
     #generate_elephant_pattern(f,pattern_time)
-    generate_elephant_long_sleep_pattern(f,pattern_time,{long_time: 10,long_rate: 0.01,large_rate: 0.5,small_rate: 0.9}) 
+    #generate_elephant_long_sleep_pattern(f,pattern_time,{long_time: 10,long_rate: 0.01,large_rate: 0.5,small_rate: 0.9}) 
     #generate_bursty_pattern(f,pattern_time)
+    generate_by_patching_files(f,pattern_time)
   end
 end
 
