@@ -58,6 +58,10 @@ LINK_DELAY = {}
 
 
 _mode = ARGV[0]
+if _mode.nil?
+  puts "Please add mode as forst argument! or use '<program> __last__' to use last settings"
+  exit
+end
 
 if _mode &&  _mode =~ /__last__/i
   File.open("last_setup_mode.tmp") do |f|
