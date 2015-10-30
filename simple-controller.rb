@@ -141,11 +141,30 @@ def process_switches
   reset_host_command
   now = Time.now
   switches = []
-  $client_sw.clone.each_pair do |id,data|
-    switches[STARTING_ORDER.index(id)] = [id,data]
+  if defined? MULTIPLE_STARTING
+    src_sws = $client_sw.clone
+    STARTING_ORDER.each do |order_array|
+      sub_result = []
+      src_sws.each_pair do |id,data|
+        index = order_array.index(id)
+        if index
+          sub_result[order_array.index(id)] = [id,data]
+        end
+      end
+      switches += sub_result
+    end
+  else
+    $client_sw.clone.each_pair do |id,data|
+      switches[STARTING_ORDER.index(id)] = [id,data]
+    end
+
   end
   switches.each_with_index do |obj,index|
+    next if !obj
     id,data = obj
+    if data.nil?
+      puts "switches:#{switches},index:#{index},obj:#{obj}"
+    end
     fd = data[:fd]
 
     # 讀取：速度與queue長度
@@ -472,10 +491,23 @@ def process_hosts
   end
 end
 
+# 找出最下游switch
+def find_main_port_data(id)
+  if defined? MULTIPLE_STARTING
+    STARTING_ORDER.each do |sub_order|
+      main_port_data = $host_belong_sw[id].find { |port_data| port_data[:port] == sub_order[0] }
+      if main_port_data
+        return main_port_data
+      end
+    end
+  else
+    main_port_data = $host_belong_sw[id].find { |port_data| port_data[:port] == STARTING_ORDER[0] }
+  end
+end
 
 def distribute_host_speed(id,pack)
   # 找出最下游switch
-  main_port_data = $host_belong_sw[id].find { |port_data| port_data[:port] == STARTING_ORDER[0] }
+  main_port_data = find_main_port_data(id)
   if main_port_data[:host_count] > 0
     # 算可分得速度(in bits)
     spd_added = (pack[:spd].to_f * RE_DISTRIBUTE_RATE ).round
@@ -549,7 +581,7 @@ def show_info
     limit = data[:spd] > 0 ? data[:spd] : MAX_SPEED_M
     total_spd = $port_data[id][:total_spd] # in bits
     avg_spd = $port_data[id][:avg_speed] # in bits
-    log_info = "#{Time.now - BASE_TIME} #{total_spd.to_i} #{avg_spd.to_i} #{current_util} #{recent_util} #{total_util} #{len}"
+    log_info = "#{Time.now.to_f} #{total_spd.to_i} #{avg_spd.to_i} #{current_util} #{recent_util} #{total_util} #{len}"
     log_queue = $port_data[id][:log_queue]
     log_queue << log_info
     if log_queue.size > 10

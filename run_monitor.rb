@@ -6,7 +6,13 @@ pipes = {}
 children = {}
 
 # Fork all monitors
-STARTING_ORDER.each do |port|
+switches = []
+if defined? MULTIPLE_STARTING
+  switches = STARTING_ORDER.flatten
+else
+  switches = STARTING_ORDER
+end
+switches.each do |port|
   if port =~/(.*)-eth(.*)/
     puts "Starting:#{port}"
     sw = $1
