@@ -5,6 +5,7 @@ require 'thread'
 require 'fileutils'
 require_relative 'host-info'
 require_relative 'qos-info'
+require_relative 'qos-lib'
 
 $DEBUG = true
 
@@ -28,6 +29,7 @@ $host = ARGV[0]
 $port = ARGV[1].to_i
 $size_remain_mutex = Mutex.new
 $pattern_size_ready = ConditionVariable.new
+$request_finish = ConditionVariable.new
 $log_name=sprintf(HOST_LOG_NAME_FORMAT,$port)
 
 FileUtils.rm_f $log_name
@@ -39,6 +41,7 @@ def connect_server
     $sender = TCPSocket.new($host,$port)
   when :udp
     $sender = UDPSocket.new
+    $sender.bind("0.0.0.0",$port)
     $sender.connect($host,$port)
 
   end
@@ -59,6 +62,7 @@ def clear_variables
   $speed_report = 0
   $delay_send = 0
   $this_time_send = 0
+  $sub_count = 0
 end
 
 def reset_size_remaining
@@ -87,7 +91,7 @@ def run_detect_thread
       # 紀錄檔案
       if $start_logging
         File.open($log_name,'a') do |f|
-          f.puts $interval_send
+          f.puts "#{Time.now.to_f} #{$interval_send}"
         end
       end
       if $running
@@ -163,6 +167,11 @@ def run_pattern_thread
                 $pattern_size_ready.signal
               end
               new_added = 0
+              # 等待sender傳送結束
+              $size_remain_mutex.synchronize do
+                $request_finish.wait($size_remain_mutex)
+              end
+              puts "本次需求傳輸結束！等待下次需求..."
 
             end
             sleep_time = $1.to_f
@@ -173,12 +182,18 @@ def run_pattern_thread
         end
       end
       if new_added > 0
+        # 新增傳輸需求給sender
         printf("新增傳輸需求：%.6f MB(%d bytes)\n",new_added.to_f/UNIT_MEGA,new_added)
         $size_remain_mutex.synchronize do
           $size_remaining += new_added
           $pattern_size_ready.signal
         end
         new_added = 0
+        # 等待sender傳送結束
+        $size_remain_mutex.synchronize do
+          $request_finish.wait($size_remain_mutex)
+        end
+
       end
 
       puts "pattern結束，sleep forever"
@@ -207,12 +222,14 @@ def wait_for_next
   when :time,:size
     sleep rand(CLIENT_RANDOM_SLEEP_RANGE)+1
   when :pattern
+    puts "任務編號:#{$task_no}已結束，等待下一個傳輸需求..."
     $size_remain_mutex.synchronize do
+      $request_finish.signal
       if $size_remaining <= 0
-        puts "等待傳輸需求..."
         $pattern_size_ready.wait($size_remain_mutex)
       end
     end
+    $task_no += 1
     puts "已取得傳輸要求！"
   end
 end
@@ -243,6 +260,76 @@ def restart_client
 
   # restart threads
   run_monitor_thread
+  
+  puts "開始傳輸任務編號：#{$task_no}，等待確認中..."
+  wait_for_confirm_task
+end
+
+def generate_request_str
+  req = {}
+  req[:is_request] = true
+  req[:type] = "send_request"
+  req[:task_no] = $task_no
+  req[:sub_no] = [0]
+  req[:data_size] = $size_remaining
+  pack_command(req)
+end
+
+
+def send_reset
+  req = {}
+  req[:type] = "reset"
+  $sender.send(pack_command(req),0)
+end
+
+def send_data(cnt)
+  req = {}
+  req[:is_request] = true
+  req[:type] = "send"
+  req[:task_no] = $task_no
+  req[:sub_no] = [cnt]
+  req[:data_size] = $size_remaining
+  return $sender.send(pack_command(req),0)
+end
+
+def send_request_for_send
+  puts "開始傳送#{$task_no}的send request"
+  str = generate_request_str
+  $sender.send(str,0)
+end
+
+def check_is_confirm?(task_no,str)
+  req = parse_command(str)
+  # confirm格式：reply + send_confirm + task_no + sub = [0]
+  return req[:is_reply] #&& req[:type] == "send_confirm" && req[:task_no] == task_no && req[:sub_no] == [0]
+end
+
+def wait_for_confirm_task
+  # 傳送要求
+  send_request_for_send
+  # 等待對方傳回確認訊息，若沒有則每隔固定時間重送要求
+  loop do
+    ready = IO.select([$sender],[],[],1)
+    rs = ready ? ready[0] : nil
+    if rs && r = rs[0]
+      # can receive message, check if it's a confirm
+      str = $sender.read(PACKET_SIZE)
+      if check_is_confirm?($task_no,str)
+        # it a confirm, break loop
+        break
+      else
+        # Not a confirm
+        puts "收到非#{$task_no}的確認訊息，忽略"
+      end
+    else
+      # Timedout
+      puts "等待#{$task_no}的確認逾時逾時"
+    end
+    # 重送：超過時間或收到的不是確認訊息
+    send_request_for_send
+    $re_send_count += 1
+  end
+  puts "已收到#{$task_no}的確認訊息，開始傳輸！"
 end
 
 # ---- main ----
@@ -260,6 +347,8 @@ $stop_count_time = false
 $trans_time = 0.0
 $trans_size = 0.0
 $start_logging = true
+$task_no = 0
+$re_send_count = 0 # 總計重送封包之次數
 case CLIENT_RANDOM_MODE
 when :time
   reset_time
@@ -268,27 +357,38 @@ when :size
 when :pattern
   $size_remaining = 0
 end
+
+
+
 run_detect_thread
 run_monitor_thread
 run_pattern_thread
+$size_remain_mutex.synchronize do
+  if $size_remaining <= 0
+    puts "等待最初傳輸需求..."
+    $pattern_size_ready.wait($size_remain_mutex)
+  end
+end
+
 
 begin
-  cnt = 0
+  $sub_count = 1
   $start_time = Time.now
+  puts "開始傳輸任務編號：#{$task_no}，等待確認中..."
+  wait_for_confirm_task
   loop do
     $delay_send += $speed
     if $delay_send >= PACKET_SIZE
       pkts = $delay_send / PACKET_SIZE
       $delay_send %= PACKET_SIZE
       for i in 0...pkts
-        info = "#{cnt} "
-        data =  info + "1" * (PACKET_SIZE - info.size)
-        send = $sender.send(data,0)
+        # Send a packet here
+        send = send_data($sub_count)
         $total_send += send
         $interval_send += send
         $this_time_send += send
         $trans_size += send
-        cnt += 1
+        $sub_count += 1
         # 檢查離開
         if CLIENT_RANDOM_MODE == :size || CLIENT_RANDOM_MODE == :pattern
           $size_remain_mutex.synchronize do
@@ -316,7 +416,7 @@ begin
 rescue SystemExit, Interrupt
   $stop_time = Time.now if !$stop_time
   $trans_time += ($stop_time - $start_time) if !$stop_count_time
-  $sender.send("reset #{'0'*(PACKET_SIZE - 6)}",0)
+  send_reset
   $running = false
   $thr_monitor.exit if $thr_monitor
   $thr_detect.exit if $thr_detect
