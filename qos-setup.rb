@@ -38,10 +38,15 @@ puts "** 建立QoS **"
 QOS_INFO.each_pair do |port,data|
   puts "建立QoS：#{port}"
   qid = data[:eth]
+  if defined?(NO_SPEED_LIMIT_FOR) && NO_SPEED_LIMIT_FOR.include?(port)
+    max_spd = MAX_TOTAL_SPEED
+  else
+    max_spd = MAX_SPEED
+  end
   shell_exec %Q{
     ovs-vsctl -- set Port #{port} qos=@newqos -- \
     --id=@newqos create QoS type=linux-htb other-config:max-rate=#{MAX_TOTAL_SPEED} queues=#{qid}=@q#{qid} -- \
-    --id=@q#{qid} create Queue other-config:max-rate=#{MAX_SPEED} -- 
+    --id=@q#{qid} create Queue other-config:max-rate=#{max_spd} -- 
   }
 end
 # 設定Link Delay 

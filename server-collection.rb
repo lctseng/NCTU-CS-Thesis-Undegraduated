@@ -71,7 +71,7 @@ def start_read_server_info
                 print "Port #{port}:"
                 puts serv.read
             end
-            sleep 0.5
+            #sleep 0.5
         end
     end
 end

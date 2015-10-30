@@ -149,11 +149,11 @@ begin
             elsif first_no > $sub_count
               #diff = $size_to_receive - req[:data_size] + PACKET_SIZE
               #puts "task #{$task_no} 遺失資料！遺失#{$sub_count}到#{first_no}的資料共#{diff}bytes" 
-              $output.puts "task #{$task_no} 遺失資料！遺失#{$sub_count}到#{first_no}的封包"
+              #$output.puts "task #{$task_no} 遺失資料！遺失#{$sub_count}到#{first_no}的封包"
               $size_to_receive = req[:data_size]
               # 有資料遺失
               new_loss = $loss + (first_no - $sub_count)
-              $output.puts "封包遺失從#{$loss}增加為#{new_loss}"
+              #$output.puts "封包遺失從#{$loss}增加為#{new_loss}"
               $loss = new_loss
               for cnt in $sub_count...first_no
                 $loss_cnt[cnt] = true
@@ -163,7 +163,7 @@ begin
             else
               if $loss_cnt.has_key? first_no
                 $loss -= 1
-                $output.puts "錯位封包：#{first_no}"
+                #$output.puts "錯位封包：#{first_no}"
                 $loss_cnt.delete first_no
               end
               # 重複資料

@@ -164,6 +164,9 @@ when /linearTopoK4N2-single/i
   # Backward  
   add_qos_info('s1','2',[1])
 
+  #NO_SPEED_LIMIT_FOR = ["s2-eth3","s3-eth3","s4-eth3"]
+
+
   UPSTREAM_INFO = {
     # Forward
     "s1-eth1" => [HOST[2],HOST[3],HOST[4],HOST[5],HOST[6],HOST[7],HOST[8]],

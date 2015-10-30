@@ -51,6 +51,7 @@ thr_accept = Thread.new do
     when /host/
       data = {fd:c, spd: 0, cmd: '',expect_spd: 0, show_cmd: '', speed_assigned: 0, assign_locked: false}
       addr = c.peeraddr(false)
+      #id = "#{addr[3]}:#{addr[1]}"
       id = addr[3]
       $conn_mutex.synchronize do 
         $client_host[id] = data
@@ -63,6 +64,52 @@ thr_accept = Thread.new do
       c.close
     end
   end
+end
+
+def host_cmd_replace(host_data,new_cmd)
+  # assign > mul > add
+  old_cmd = host_data[:cmd]
+  valid = false
+  if old_cmd.empty?
+    valid = true
+    host_data[:cmd] = new_cmd
+  else
+    case old_cmd
+    when /assign (.*)/
+      old_spd = $1.to_i
+      # Only new assign with lower speed 
+      if new_cmd =~ /assign (.*)/
+        new_spd = $1.to_i
+        if new_spd < old_spd
+          valid = true
+        end
+      end
+    when /mul (.*)/
+      old_val = $1.to_f
+      # Assign can override
+      if new_cmd =~ /assign/
+        valid = true
+      elsif new_cmd =~ /mul (.*)/
+        # lower mul can replace
+        new_val = $1.to_f
+        if new_val < old_val
+          valid = true
+        end
+      end
+    when /add (.*)/
+      old_val = $1.to_i
+      # Assign/Mul can override
+      if new_cmd =~ /(assign)|(mul)/
+        valid = true
+      elsif new_cmd =~ /add (.*)/
+        new_val = $1.to_i
+        if new_val < old_val
+          valid = true
+        end
+      end
+    end
+  end
+  host_data[:cmd] = new_cmd if valid
 end
 
 def host_cmd_generate(cmd,val)
@@ -334,8 +381,9 @@ def check_switch_queue(id,data)
         min_data = $host_belong_sw[host_id].min do |a,b|
           (a[:should_spd]*UNIT_MEGA - a[:total_spd] + host_spd ) <=> (b[:should_spd]*UNIT_MEGA - b[:total_spd] + host_spd)
         end
+        # Assign已改用即時加法
         #if distribute_speed > 0
-        #puts "來自#{id}的速度分配assign給#{host_id}，速度：#{distribute_speed / UNIT_MEGA} Mbits"
+        #  puts "來自#{id}的速度分配assign給#{host_id}，速度：#{distribute_speed / UNIT_MEGA} Mbits"
         #  max_spd = (host_data[:spd] + distribute_speed)/8
         #else
         max_spd = (min_data[:should_spd]*UNIT_MEGA - min_data[:total_spd] + host_spd)/8
@@ -369,7 +417,7 @@ def check_switch_queue(id,data)
           #puts "最終指派：#{current*8.0 / UNIT_MEGA} Mbits"
           cmd = "assign #{current}"
           host_data[:expect_spd] = current
-          host_data[:cmd] = cmd
+          host_cmd_replace(host_data,cmd)
           host_data[:speed_assigned] = current * 8
           host_data[:assign_locked] = true
         end
@@ -379,7 +427,7 @@ def check_switch_queue(id,data)
           if current < host_data[:expect_spd]
             cmd = host_cmd_generate("mul",mul)
             host_data[:expect_spd] = current
-            host_data[:cmd] = cmd
+            host_cmd_replace(host_data,cmd)
           end
         elsif add
           # 平均速度檢查
@@ -401,7 +449,7 @@ def check_switch_queue(id,data)
           if current < host_data[:expect_spd]
             cmd = host_cmd_generate("add",sprintf("%+d",final_add))
             host_data[:expect_spd] = current
-            host_data[:cmd] = cmd
+            host_cmd_replace(host_data,cmd)
           end
         end
       end
