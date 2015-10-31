@@ -407,7 +407,7 @@ def check_switch_queue(id,data)
           # 根據當前host數量降低assign強度
           host_count = $port_data[id][:host_count]
           if host_count > 1
-            div_rate = Math.log(host_count,1.7)
+            div_rate = Math.log(host_count,CTRL_HOST_COUNT_LOG_BASE)
             max_spd = max_spd / div_rate
           end
           #puts "host數量調整後：#{max_spd*8.0 / UNIT_MEGA} Mbits"

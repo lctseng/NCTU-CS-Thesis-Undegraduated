@@ -87,7 +87,7 @@ QOS_INFO.each_pair do |port,data|
   sw = data[:sw]
   data[:ingress_list].each do |in_port|
     puts "新增flow table entry：#{sw}，ingress_port：#{in_port}"
-    for port in 5001..5008
+    for port in data[:udp_port]
       shell_exec("ovs-ofctl add-flow #{sw} udp,tp_dst=#{port},priority=1024,in_port=#{in_port},actions=set_queue:#{data[:eth]},normal")
       shell_exec("ovs-ofctl add-flow #{sw} tcp,tp_dst=#{port},priority=1024,in_port=#{in_port},actions=set_queue:#{data[:eth]},normal")
     end

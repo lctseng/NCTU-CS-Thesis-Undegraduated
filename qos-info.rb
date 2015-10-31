@@ -25,9 +25,10 @@ CHECK_FORCE_ASSIGN_IDLE_RATE = 0.5
 MAX_UTIL_RECORD = 300
 ENABLE_REDISTRIBUTE = true
 RE_DISTRIBUTE_RATE = 0.5
-RE_DISTRIBUTE_THRESHOLD = 10000
+RE_DISTRIBUTE_THRESHOLD = 5000
 CTRL_BALANCE_DECREASE_VALUE = 1
 CTRL_ASSIGN_BASELINE = 1000
+CTRL_HOST_COUNT_LOG_BASE = 2
 
 # Client端設置
 CLIENT_RANDOM_MODE = :pattern
@@ -49,8 +50,8 @@ SWITCH_LOG_NAME_JSON_FORMAT = "json/switch_%s_%s.json"
 
 # QoS資料
 QOS_INFO = {}
-def add_qos_info(sw,eth,ingress_list)
-  QOS_INFO["#{sw}-eth#{eth}"] = {eth: eth,ingress_list: ingress_list,sw: sw}
+def add_qos_info(sw,eth,ingress_list,udp_port = 5001..5008)
+  QOS_INFO["#{sw}-eth#{eth}"] = {eth: eth,ingress_list: ingress_list,sw: sw,udp_port: udp_port}
 end
 
 LINK_DELAY = {}
@@ -162,7 +163,7 @@ when /linearTopoK4N2-single/i
   add_qos_info('s3','3',[1,2,4])
   add_qos_info('s4','3',[1,2])
   # Backward  
-  add_qos_info('s1','2',[1])
+  #add_qos_info('s1','2',[1])
 
   #NO_SPEED_LIMIT_FOR = ["s2-eth3","s3-eth3","s4-eth3"]
 
@@ -174,7 +175,7 @@ when /linearTopoK4N2-single/i
     "s3-eth3" => [HOST[3],HOST[4],HOST[7],HOST[8]],
     "s4-eth3" => [HOST[4],HOST[8]],
     # Backward
-    "s1-eth2" => [HOST[1]],
+    #"s1-eth2" => [HOST[1]],
   }
   UPSTREAM_SWITCH = {
     # Forward
@@ -189,7 +190,7 @@ when /linearTopoK4N2-single/i
   # Forward
   STARTING_ORDER << ["s1-eth1","s2-eth3","s3-eth3","s4-eth3"]
   # Backward
-  STARTING_ORDER << ["s1-eth2"]
+  #STARTING_ORDER << ["s1-eth2"]
 
 
 
