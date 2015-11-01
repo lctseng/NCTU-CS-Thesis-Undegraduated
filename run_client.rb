@@ -46,7 +46,7 @@ begin
         pipes.delete ip
       end
     end
-    sleep 0.5
+    sleep 0.1
   end
 rescue SystemExit, Interrupt, SignalException
   print "結束中\n\r"

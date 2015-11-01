@@ -9,17 +9,16 @@ require_relative 'qos-lib'
 
 $DEBUG = true
 
-SEND_INTERVAL = 0.001
 if ENABLE_CONTROL
   if ENABLE_ASSIGN
-    INIT_SPEED_PER_SECOND = 0
+    INIT_SPEED_PER_SECOND = 8*CTRL_ASSIGN_BASELINE 
   else
     INIT_SPEED_PER_SECOND = 8*1000
   end
 else
   INIT_SPEED_PER_SECOND = 2 * MAX_SPEED / 8
 end
-INIT_SPEED_PER_INTERVAL = INIT_SPEED_PER_SECOND * SEND_INTERVAL
+INIT_SPEED_PER_INTERVAL = INIT_SPEED_PER_SECOND * CLI_SEND_INTERVAL
 
 
 
@@ -63,6 +62,7 @@ def clear_variables
   $delay_send = 0
   $this_time_send = 0
   $sub_count = 0
+  $accept_rate = 1.0
 end
 
 def reset_size_remaining
@@ -86,12 +86,22 @@ def run_detect_thread
   # 速度偵測
   $thr_detect.exit if $thr_detect
   $thr_detect = Thread.new do
+    last_time = Time.now
     loop do
+      # Timing compute
+      this_time = Time.now
+      if this_time - last_time < 1.0
+        sleep 0.01
+        next
+      end
+      last_time = Time.now
+
       $speed_report = $interval_send
+      #$speed_report = $speed / CLI_SEND_INTERVAL.to_f
       # 紀錄檔案
       if $start_logging
         File.open($log_name,'a') do |f|
-          f.puts "#{Time.now.to_f} #{$interval_send}"
+          f.puts "#{Time.now.to_f} #{$speed_report}"
         end
       end
       if $running
@@ -101,10 +111,9 @@ def run_detect_thread
         when :size,:pattern
           remain_str = sprintf("還需傳輸%.6f MB(%d bytes)，",$size_remaining/UNIT_MEGA.to_f,$size_remaining)
         end
-        printf("總共傳輸：%.6f MB，%s當前速度：%.3f Mbit/s\n",$total_send.to_f/UNIT_MEGA,remain_str,$interval_send * 8.0 /UNIT_MEGA )
+        printf("總共傳輸：%.6f MB，%s當前速度：%.3f Mbps\n",$total_send.to_f/UNIT_MEGA,remain_str,$speed_report * 8.0 /UNIT_MEGA )
       end
       $interval_send = 0
-      sleep 1
     end
   end
 end
@@ -130,8 +139,8 @@ def run_monitor_thread
           end
         when /interval_add/
           data = line.split
-          puts "重新分配加速：#{sprintf("%+d",data[1].to_i*SEND_INTERVAL)}"
-          eval "$speed = $speed #{sprintf("%+d",data[1].to_i*SEND_INTERVAL)}"
+          puts "重新分配加速：#{sprintf("%+d",data[1].to_i*CLI_SEND_INTERVAL)}"
+          eval "$speed = $speed #{sprintf("%+d",data[1].to_i*CLI_SEND_INTERVAL)}"
         when /add/
           data = line.split
           eval "$speed = $speed #{data[1]}"
@@ -140,9 +149,11 @@ def run_monitor_thread
           eval "$speed = ($speed * #{data[1]}).round"
         when /assign/
           spd = line.split[1].to_i
-          #puts "速度被指派為#{spd*8.0 / UNIT_MEGA} Mbits"
+          puts "速度被指派為#{spd*8.0 / UNIT_MEGA} Mbits"
           $assign_report = true
-          $speed = spd * SEND_INTERVAL
+          $speed = spd * CLI_SEND_INTERVAL
+        when /acc_rate (.*)/
+          $accept_rate = $1.to_f
         end
       end
     end
@@ -309,6 +320,14 @@ def wait_for_confirm_task
   send_request_for_send
   # 等待對方傳回確認訊息，若沒有則每隔固定時間重送要求
   loop do
+    puts "傳輸成功率：#{$accept_rate}"
+    if $accept_rate < rand
+      puts "被controller要求延遲傳送request..."
+      sleep 1
+      next
+    else
+      puts "允許傳送request！"
+    end
     ready = IO.select([$sender],[],[],1)
     rs = ready ? ready[0] : nil
     if rs && r = rs[0]
@@ -376,11 +395,19 @@ begin
   $start_time = Time.now
   puts "開始傳輸任務編號：#{$task_no}，等待確認中..."
   wait_for_confirm_task
+  last_time = Time.now
   loop do
+    # Timing compute
+    this_time = Time.now
+    if this_time - last_time < CLI_SEND_INTERVAL
+      sleep CLI_SEND_DETECT_INTERVAL
+      next
+    end
+    last_time = Time.now
     $delay_send += $speed
     if $delay_send >= PACKET_SIZE
-      pkts = $delay_send / PACKET_SIZE
-      $delay_send %= PACKET_SIZE
+      pkts = $delay_send.to_i / PACKET_SIZE
+      $delay_send -= pkts * PACKET_SIZE
       for i in 0...pkts
         # Send a packet here
         send = send_data($sub_count)
@@ -399,7 +426,7 @@ begin
             end
           end
         end
-      end
+      end # end for
     end
     if CLIENT_STOP_SIZE_BYTE > 0 && CLIENT_RANDOM_MODE != :pattern && $trans_size >= CLIENT_STOP_SIZE_BYTE
       raise SystemExit
@@ -411,7 +438,6 @@ begin
       restart_client
       $start_time = Time.now
     end
-    sleep SEND_INTERVAL
   end
 rescue SystemExit, Interrupt
   $stop_time = Time.now if !$stop_time

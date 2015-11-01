@@ -41,7 +41,7 @@ QOS_INFO.each_pair do |port,data|
   if defined?(NO_SPEED_LIMIT_FOR) && NO_SPEED_LIMIT_FOR.include?(port)
     max_spd = MAX_TOTAL_SPEED
   else
-    max_spd = MAX_SPEED
+    max_spd = MAX_SPEED / UNIT_MEGA * 10**6
   end
   shell_exec %Q{
     ovs-vsctl -- set Port #{port} qos=@newqos -- \

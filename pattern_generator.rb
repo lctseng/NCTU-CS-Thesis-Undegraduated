@@ -54,9 +54,10 @@ end
 
 
 def generate_elephant_pattern(f,pattern_time)
+  f.puts rand(10*UNIT_MEGA) + 1*UNIT_MEGA
   while pattern_time > 0
     # mice traffic
-    if rand < 0.05
+    if rand < 0.00
       10.times do
         f.puts rand(500*2**10)
         if rand < 0.5
@@ -67,7 +68,7 @@ def generate_elephant_pattern(f,pattern_time)
     end
 
     # short sleep
-    if rand < 0.5
+    if rand < 0.0
       sleep_time = [rand(100)/100.0,pattern_time].min
       pattern_time = write_sleep(f,pattern_time,sleep_time)
     end
@@ -77,12 +78,12 @@ def generate_elephant_pattern(f,pattern_time)
       pattern_time = write_sleep(f,pattern_time,sleep_time)
     end
     # small traffic
-    if rand < 0.5
-      f.puts rand(10*UNIT_MEGA)
+    if rand < 0.1
+      f.puts rand(30*UNIT_MEGA)
     end
     # burst traffic
     if rand < 0.05
-      f.puts rand(100*UNIT_MEGA) + UNIT_MEGA
+      f.puts rand(100*UNIT_MEGA) + 50*UNIT_MEGA
     end
 
   end
@@ -155,11 +156,14 @@ def generate_by_patching_files(f,pattern_time)
     next if !File.file?(full_name)
     content = ''
     time = 0.0
+    size = 0
     File.open(full_name) do |f|
       while f.gets
         content += $_
         if ~ /sleep (\d+(\.\d+)?)/i
           time += $1.to_f
+        else
+          size += $_.to_i
         end
       end
     end
@@ -167,11 +171,18 @@ def generate_by_patching_files(f,pattern_time)
       content += "sleep 0.1\n"
       time = 0.1
     end
-    patterns << [f_name,content,time]
+    patterns << [f_name,content,time,size]
   end
   # 開始湊數值
   while pattern_time > 0
     pattern = patterns.sample
+    if pattern[3] > 100*2**20
+      if rand < 0.1
+        pattern_time = 0
+      else
+        next
+      end
+    end
     f.puts "# from: #{pattern[0]}"
     f.print pattern[1]
     pattern_time -= pattern[2]
@@ -181,13 +192,18 @@ def generate_by_patching_files(f,pattern_time)
 
 end
 
+def generate_long_flow(f,pattern_time)
+  f.puts 1000*UNIT_MEGA
+end
+
 def generate_pattern(out_name,pattern_time)
   File.open(sprintf(CLIENT_PATTERN_NAME_FORMAT,out_name),'w') do |f|
     #generate_default_pattern(f,pattern_time)
-    #generate_elephant_pattern(f,pattern_time)
+    generate_elephant_pattern(f,pattern_time)
     #generate_elephant_long_sleep_pattern(f,pattern_time,{long_time: 10,long_rate: 0.01,large_rate: 0.5,small_rate: 0.9}) 
     #generate_bursty_pattern(f,pattern_time)
-    generate_by_patching_files(f,pattern_time)
+    #generate_by_patching_files(f,pattern_time)
+    #generate_long_flow(f,pattern_time)
   end
 end
 

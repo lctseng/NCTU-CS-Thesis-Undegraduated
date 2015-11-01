@@ -7,7 +7,8 @@ $DEBUG = true
 
 # 傳送資料間隔
 MONITOR_INTERVAL = 0.05
-
+MONITOR_DETECT_INTERVAL = MONITOR_INTERVAL / 10.0
+$max_spd = MAX_SPEED / UNIT_MEGA
 
 # 紀錄最後長度
 $last_len = 0
@@ -85,7 +86,15 @@ end
 
 # 不斷取得queue len
 begin
+  last_time = Time.now
   loop do
+    # Timing compute
+    this_time = Time.now
+    if this_time - last_time < MONITOR_INTERVAL
+      sleep MONITOR_DETECT_INTERVAL
+      next
+    end
+    last_time = Time.now
     $q_data = data =  get_queue_len($qid)
     len = data[:len]
     if len >= 0 
@@ -95,7 +104,6 @@ begin
       printf("%5d,速度上限：%3d Mbits ,Queue:%s\n",len,data[:spd],"|"*bar_len) if MONITOR_SHOW_INFO
     end
 
-    sleep MONITOR_INTERVAL
   end
 rescue SystemExit, Interrupt
   thr_speed.exit

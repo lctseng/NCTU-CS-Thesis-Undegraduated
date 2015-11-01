@@ -63,3 +63,15 @@ def pack_command(req)
   pad = '1' * (PACKET_SIZE - info.size)
   return info + pad
 end
+
+
+def get_switch_priority(sw_id)
+  return 9999 if sw_id.nil?
+  switches = []
+  if defined? MULTIPLE_STARTING
+    switches = STARTING_ORDER.flatten
+  else
+    switches = STARTING_ORDER
+  end
+  return switches.index(sw_id) || 9999
+end
