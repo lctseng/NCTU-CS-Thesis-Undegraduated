@@ -16,23 +16,24 @@ DATA_PROTOCOL = ENABLE_CONTROL ? :udp : :tcp
 PACKET_SIZE = 1400
 MONITOR_SHOW_INFO = true
 LINE_UTIL_RATE = MAX_BW_UTIL_RATE
+DEBUG_TIMING = false
 
 # Contorller端設置
 CTRL_QUEUE_DRAW_BAR_DIV = 60.0
 CTRL_DRAW_BAR_DIV = 2.5 * (MAX_SPEED / (100*UNIT_MEGA))
 CTRL_DRAW_HOST_LINE_NUMBER = 7
 ENABLE_ASSIGN = true
-ASSIGN_RATE = 0.7
-CHECK_FORCE_ASSIGN_IDLE_RATE = 0.5 # 1.0 = disabled
+ASSIGN_RATE = 0.9
+CHECK_FORCE_ASSIGN_IDLE_RATE = 1.0 # 1.0 = disabled
 CHECK_FORCE_ASSIGN_IDLE_HOST_COUNT = 2 # host count <= this number to enable force re-assign
 MAX_UTIL_RECORD = 300
 ENABLE_REDISTRIBUTE = true
-RE_DISTRIBUTE_RATE = 0.7
+RE_DISTRIBUTE_RATE = 0.9
 RE_DISTRIBUTE_THRESHOLD = 5000
-CTRL_BALANCE_THRESHOLD_RATE = 0.5
-CTRL_BALANCE_DECREASE_VALUE = 30
-CTRL_BALANCE_CHANGE_RATE = -1.0
-CTRL_ASSIGN_BASELINE = 1000
+CTRL_BALANCE_THRESHOLD_RATE = 0.1
+CTRL_BALANCE_DECREASE_VALUE = 50
+CTRL_BALANCE_CHANGE_RATE = -0.5
+CTRL_ASSIGN_BASELINE = 100000
 CTRL_HOST_COUNT_LOG_BASE = 2.0
 CTRL_SW_SPEED_LIMIT_ADJUST = 1.0 # 1.0 = precise
 
@@ -47,6 +48,9 @@ CLIENT_STOP_SIZE_BYTE = 2000*UNIT_MEGA
 CLIENT_PATTERN_NAME_FORMAT = "pattern/client_%s.pattern"
 CLI_SEND_INTERVAL = 0.005
 CLI_SEND_DETECT_INTERVAL = CLI_SEND_INTERVAL / 10.0
+CLI_WAIT_FOR_ACK = true
+CLI_ACK_SLICE = 256 * UNIT_KILO
+
 
 # LOG 設置
 HOST_LOG_NAME_FORMAT = "log/host_speed_%s.log"
@@ -65,18 +69,22 @@ end
 LINK_DELAY = {}
 
 
-
-_mode = ARGV[0]
-if _mode.nil?
-  puts "Please add mode as forst argument! or use '<program> __last__' to use last settings"
-  exit
-end
-
-if _mode &&  _mode =~ /__last__/i
-  File.open("last_setup_mode.tmp") do |f|
-    str = f.gets
-    _mode = str if str
+if !defined?(NO_TYPE_REQUIRED) || !NO_TYPE_REQUIRED
+  _mode = ARGV[0]
+  if _mode.nil?
+    puts "Please add mode as first argument! or use '<program> __last__' to use last settings"
+    exit
   end
+
+  if _mode &&  _mode =~ /__last__/i
+    File.open("last_setup_mode.tmp") do |f|
+      str = f.gets
+      _mode = str if str
+    end
+  end
+else
+  $stderr.puts "NOTICE: No mode is specfied"
+  _mode = nil
 end
 
 

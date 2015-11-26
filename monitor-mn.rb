@@ -97,6 +97,9 @@ begin
     last_time = Time.now
     $q_data = data =  get_queue_len($qid)
     len = data[:len]
+    if len >= 500
+      puts "在#{Time.now.to_f}發起！" if DEBUG_TIMING
+    end
     if len >= 0 
       notify_controller(data)
       # 畫圖

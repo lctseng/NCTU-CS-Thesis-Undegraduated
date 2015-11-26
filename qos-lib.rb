@@ -24,6 +24,16 @@ class IO
   end
 end
 
+def spin_time(wait_time)
+  last_time = Time.now
+  loop do
+    this_time = Time.now
+    if this_time - last_time >= wait_time
+      break
+    end
+  end
+
+end
 
 def parse_command(str)
   req = {}

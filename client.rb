@@ -63,6 +63,7 @@ def clear_variables
   $this_time_send = 0
   $sub_count = 0
   $accept_rate = 1.0
+  $ack_send = 0
 end
 
 def reset_size_remaining
@@ -145,6 +146,7 @@ def run_monitor_thread
           data = line.split
           eval "$speed = $speed #{data[1]}"
         when /mul/
+          puts "在#{Time.now.to_f}收到！" if DEBUG_TIMING
           data = line.split
           eval "$speed = ($speed * #{data[1]}).round"
         when /assign/
@@ -312,7 +314,13 @@ end
 def check_is_confirm?(task_no,str)
   req = parse_command(str)
   # confirm格式：reply + send_confirm + task_no + sub = [0]
-  return req[:is_reply] #&& req[:type] == "send_confirm" && req[:task_no] == task_no && req[:sub_no] == [0]
+  return req[:is_reply] && req[:type] == "send_confirm" && req[:task_no] == task_no && req[:sub_no] == [0]
+end
+
+def check_is_ack?(task_no,str)
+  req = parse_command(str)
+  # confirm格式：reply + send_confirm + task_no + sub = [0]
+  return req[:is_reply] && req[:type] == "send_ack" && req[:task_no] == task_no && req[:sub_no] == [0]
 end
 
 def wait_for_confirm_task
@@ -349,6 +357,44 @@ def wait_for_confirm_task
     $re_send_count += 1
   end
   puts "已收到#{$task_no}的確認訊息，開始傳輸！"
+end
+
+def send_ack_request
+  req = {}
+  req[:is_request] = true
+  req[:type] = "send_ack"
+  req[:task_no] = $task_no
+  str = pack_command(req)
+  $sender.send(str,0)
+end
+
+def wait_for_ack
+  if !CLI_WAIT_FOR_ACK
+    return
+  end
+  send_ack_request
+  # 等待對方傳回確認訊息，若沒有則每隔固定時間重送要求
+  loop do
+    ready = IO.select([$sender],[],[],1)
+    rs = ready ? ready[0] : nil
+    if rs && r = rs[0]
+      # can receive message, check if it's a confirm
+      str = $sender.read(PACKET_SIZE)
+      if check_is_ack?($task_no,str)
+        # it an ack, break loop
+        break
+      else
+        # Not a ack
+        puts "收到非#{$task_no}的ACK訊息，忽略"
+      end
+    else
+      # Timedout
+      puts "等待#{$task_no}的ACK逾時逾時"
+    end
+    # 重送：超過時間或收到的不是確認訊息
+    send_ack_request
+  end
+  #puts "已收到#{$task_no}的ACK訊息，繼續傳輸！"
 end
 
 # ---- main ----
@@ -425,6 +471,13 @@ begin
               break
             end
           end
+        end
+        $ack_send += send
+        # 等待ACK
+        if $ack_send >= CLI_ACK_SLICE
+          #puts "等待ACK中..."
+          $ack_send = 0
+          wait_for_ack
         end
       end # end for
     end

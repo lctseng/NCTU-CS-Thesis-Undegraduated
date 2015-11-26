@@ -316,28 +316,28 @@ def check_switch_queue(id,data)
       add = 200
     else
       add = 100
-      acc_rate = 0.7
+      acc_rate = 0.97
     end
   elsif len <= 25
     if diff < 0 # 下降
       add = 100
     else 
       add = 50
-      acc_rate = 0.6
+      acc_rate = 0.96
     end
   elsif len <= 50
     if diff < 0 # 下降
       add = 100
     else
       add = 5
-      acc_rate = 0.5
+      acc_rate = 0.95
     end
   elsif len > 50 && len <= 100
     if diff < 0 # 下降
       add = 50
     else 
       add = -1
-      acc_rate = 0.5
+      acc_rate = 0.95
     end
   elsif len > 100 && len <= 300
     if diff < 0 # 下降
@@ -345,7 +345,7 @@ def check_switch_queue(id,data)
     else
       low = ((len - 100.0)/10.0).round + 1
       add  = low * -5
-      acc_rate = 0.5
+      acc_rate = 0.95
     end
   elsif len > 300 && len < 500
     if diff < 0 # 下降
@@ -353,7 +353,7 @@ def check_switch_queue(id,data)
     else
       low = ((len - 300.0)/10.0).round + 2
       add  = low * -10
-      acc_rate = 0.5
+      acc_rate = 0.9
     end
     #elsif len >= 300
     #  if diff < 0 # 下降
@@ -372,7 +372,7 @@ def check_switch_queue(id,data)
       mul = 0.95
     else
       mul = 0.7
-      acc_rate = 0.3
+      acc_rate = 0.9
     end
   elsif len >= 600
     if diff < 0 # 下降
@@ -498,7 +498,7 @@ def check_switch_queue(id,data)
             if final_add > 0
               final_add *= CTRL_BALANCE_CHANGE_RATE
             end
-            final_add -= CTRL_BALANCE_DECREASE_VALUE
+            #final_add -= CTRL_BALANCE_DECREASE_VALUE
             #final_add -= CTRL_BALANCE_DECREASE_VALUE
           elsif $host_belong_sw[host_id].any? {|data| (data[:avg_speed] - curr_spd) > data[:avg_speed] * CTRL_BALANCE_THRESHOLD_RATE &&
                                             (curr_spd < data[:div_spd]*UNIT_MEGA )}
@@ -515,6 +515,7 @@ def check_switch_queue(id,data)
             final_add = ( final_add /  (host_count - 1.5)).round
           end
 
+          final_add = 200 if DEBUG_TIMING
           #puts "來自#{id}的指令：#{final_add}"
           current = host_data[:spd] + final_add
           if current < host_data[:expect_spd]

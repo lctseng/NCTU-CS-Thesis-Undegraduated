@@ -54,6 +54,25 @@ def send_request_confirm(receiver,req)
   end
 end
 
+def send_ack_confirm(receiver,req)
+  case req[:type]
+  when "send_ack"
+    req[:type] = "send_ack"
+  else
+    req[:type] = "noop"
+  end
+  req[:is_request] = false
+  req[:is_reply] = true
+
+  # TODO: timing
+  #spin_time (rand(11)+5)*0.0001
+  if DATA_PROTOCOL == :udp
+    #$output.puts "傳送ACK給#{$addr}"
+    receiver.send(pack_command(req),0,$addr[3],$addr[1])
+  else
+    receiver.send(pack_command(req),0)
+  end
+end
 
 def reset_variables
   $cnt = 0
@@ -185,6 +204,9 @@ begin
         else # else case state
 
         end
+      when "send_ack" # 傳送的ACK
+        # ACK的task no少1
+        send_ack_confirm(receiver,req)
       else
         next
       end

@@ -199,10 +199,10 @@ end
 def generate_pattern(out_name,pattern_time)
   File.open(sprintf(CLIENT_PATTERN_NAME_FORMAT,out_name),'w') do |f|
     #generate_default_pattern(f,pattern_time)
-    generate_elephant_pattern(f,pattern_time)
+    #generate_elephant_pattern(f,pattern_time)
     #generate_elephant_long_sleep_pattern(f,pattern_time,{long_time: 10,long_rate: 0.01,large_rate: 0.5,small_rate: 0.9}) 
     #generate_bursty_pattern(f,pattern_time)
-    #generate_by_patching_files(f,pattern_time)
+    generate_by_patching_files(f,pattern_time)
     #generate_long_flow(f,pattern_time)
   end
 end
