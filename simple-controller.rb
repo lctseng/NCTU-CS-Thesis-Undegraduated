@@ -156,7 +156,13 @@ def write_host_command
     if !data[:cmd].empty?
       #puts "#{id} 寫入：#{data[:cmd]}"
       begin
+        if DEBUG_TIMING && data[:cmd] =~ /mul/
+          puts "送出時間：#{Time.now.to_f}"
+        end
         data[:fd].puts data[:cmd] 
+        if DEBUG_TIMING && data[:cmd] =~ /mul/
+          puts "結束送出時間：#{Time.now.to_f}"
+        end
         data[:fd].puts "acc_rate #{data[:accept_rate]}"
         data[:show_cmd] = data[:cmd]
       rescue
@@ -226,6 +232,7 @@ end
 def process_switches
   reset_should_speed
   reset_host_command
+  print_t = false
   now = Time.now
   switches = []
   if defined? MULTIPLE_STARTING
@@ -271,7 +278,8 @@ def process_switches
       # 更新spd 
       data[:last_spd] = data[:spd]
       data[:spd] = $2.to_i
-
+      puts "在#{Time.now.to_f}收到sw通知！" if DEBUG_TIMING && data[:len] > 500
+      
     else
       # 無法識別
     end
@@ -284,19 +292,26 @@ def process_switches
     threshold = MAX_NOTIFICATION_INTERVAL
     len = data[:len]
     if len > 500
-      threshold = 0.05
+      threshold = 0.001
+      if DEBUG_TIMING
+        puts "檢驗時間：#{Time.now.to_f}"
+        print_t = true
+      end
     elsif len > 600
-      threshold = 0.01
+      threshold = 0.001
     elsif len > 700
       threshold = 0.001
     elsif len > 900
       threshold = 0
     end
 
-    if now - data[:last_mod] > threshold
+    if DEBUG_TIMING || now - data[:last_mod] > threshold
       data[:last_mod] = now
       check_switch_queue(id,data)
     end
+  end
+  if DEBUG_TIMING && print_t
+    puts "準備送出時間：#{Time.now.to_f}"
   end
   write_host_command
   write_should_speed
@@ -308,33 +323,34 @@ def check_switch_queue(id,data)
   add = nil
   mul = nil
   acc_rate = 1.0
+  add_rate = 2
   # 快速增加的條件：低於div_spd的80%
   if len < 0 
     add = 500
   elsif len <= 5
     if diff < 0 # 下降
-      add = 200
+      add = 200 * add_rate
     else
-      add = 100
+      add = 100 * add_rate
       acc_rate = 0.97
     end
   elsif len <= 25
     if diff < 0 # 下降
-      add = 100
+      add = 100 * add_rate
     else 
-      add = 50
+      add = 50 * add_rate
       acc_rate = 0.96
     end
   elsif len <= 50
     if diff < 0 # 下降
-      add = 100
+      add = 100 * add_rate
     else
-      add = 5
+      add = 5 * add_rate
       acc_rate = 0.95
     end
   elsif len > 50 && len <= 100
     if diff < 0 # 下降
-      add = 50
+      add = 50 
     else 
       add = -1
       acc_rate = 0.95

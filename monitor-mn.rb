@@ -48,7 +48,9 @@ end
 # 通知controller
 def notify_controller(data)
   # 傳送資料
+  puts "在#{Time.now.to_f}通知！" if DEBUG_TIMING && data[:len] > 500
   $controller_sock.puts "len=#{data[:len]},spd=#{data[:spd]}"
+  puts "在#{Time.now.to_f}結束通知！" if DEBUG_TIMING && data[:len] > 500
 end
 # 讀取controller之速度控制訊息
 def listen_for_speed_change
