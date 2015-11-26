@@ -1,6 +1,8 @@
 #!/usr/bin/env ruby  
 require 'json'
+NO_TYPE_REQUIRED = true 
 require_relative 'qos-info'
+TIME_BASE = ARGV[1].to_f
 
 def process_port_log(port)
   filename = sprintf(HOST_LOG_NAME_FORMAT,port)
@@ -11,7 +13,10 @@ def process_port_log(port)
     array = []
     File.open(filename) do |f|
       while f.gets
-        array << $_.to_i
+        sub_data = $_.split
+        sub_data[0] = sub_data[0].to_f - TIME_BASE
+        sub_data[1] = sub_data[1].to_i
+        array << sub_data
       end
     end
     data[:size] = array.size

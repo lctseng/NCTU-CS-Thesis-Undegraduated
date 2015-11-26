@@ -1,6 +1,7 @@
 #!/usr/bin/env ruby  
 require 'json'
 require_relative 'qos-info'
+TIME_BASE = ARGV[1].to_f
 
 def process_port_log(port)
   filename = sprintf(SWITCH_LOG_NAME_FORMAT,port)
@@ -14,7 +15,7 @@ def process_port_log(port)
     File.open(filename) do |f|
       while f.gets
         data = $_.split
-        timestamp = data.shift.to_f
+        timestamp = data.shift.to_f - TIME_BASE
         total_spd, avg_spd, current_util, recent_util, total_util, qlen =  data.collect{|n| n.to_i}
         data_total_spd << [timestamp,total_spd]
         data_avg_spd << [timestamp,avg_spd]

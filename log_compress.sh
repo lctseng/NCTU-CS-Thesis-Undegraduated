@@ -1,5 +1,8 @@
-#!/bin/sh -ev
+#!/bin/sh -ex
 date=`date "+%Y-%m-%d_%H_%M_%S"`
-./host_speed_log_to_json.rb
-./switch_info_log_to_json.rb `cat last_setup_mode.tmp`
-tar -czf "${date}.json.tar.gz" json
+time_base=`./time_base_finder.rb __last__`
+./host_speed_log_to_json.rb __last__ $time_base
+./switch_info_log_to_json.rb __last__ $time_base
+name=$1
+prefix=${name:=${date}}
+tar -cf "archive/${prefix}.tar" log pattern json
