@@ -83,6 +83,128 @@ def reset_random
   end
 end
 
+def send_recv_pkt_request(pkts)
+  req = {}
+  req[:is_request] = true
+  req[:type] = "recv_pkt_request"
+  req[:data_size] = pkts
+  return $sender.send(pack_command(req),0)
+
+
+end
+
+def send_recv_request(size)
+  req = {}
+  req[:is_request] = true
+  req[:type] = "recv_request"
+  req[:data_size] = size
+  return $sender.send(pack_command(req),0)
+end
+
+def wait_for_recv_request(size)
+  puts "等待recv #{size} 的recv confirm..."
+  send_recv_request(size)
+  # 等待對方傳回確認訊息，若沒有則每隔固定時間重送要求
+  loop do
+    ready = IO.select([$sender],[],[],1)
+    rs = ready ? ready[0] : nil
+    if rs && r = rs[0]
+      # can receive message, check if it's a confirm
+      str = $sender.read(PACKET_SIZE)
+      if check_is_recv_request_confirm?(size,str)
+        # it an ack, break loop
+        break
+      else
+        # Not a ack
+        puts "收到非#{size}的recv request confirm忽略"
+      end
+    else
+      # Timedout
+      puts "等待recv #{size}的confirm逾時逾時"
+    end
+    # 重送：超過時間或收到的不是確認訊息
+    send_recv_request(size)
+  end
+  puts "已收到recv confirm"
+  
+end
+
+def wait_recv_pkt_ack
+  # Replay ack req
+  str = $sender.read(PACKET_SIZE)
+  req = parse_command(str)
+  req[:is_request] = false
+  req[:is_reply] = true
+  $sender.send(pack_command(req),0)
+end
+
+def read_data_from_server(size)
+  start = Time.now
+  $start_read = true
+  # send req & wait for confirm
+  wait_for_recv_request(size)
+  # loop do: recv and wait 
+  total_pkts = 0
+  puts "開始接收資料：#{size}"
+  while size > 0
+    send_size = [size,CLI_ACK_SLICE].min
+    size -= send_size
+    # compute pkts
+    pkts = (send_size.to_f / PACKET_SIZE).ceil
+    total_pkts += pkts
+    # send request for pkts
+    send_recv_pkt_request(pkts)
+    # recv pkts
+    expired = false
+    recvs = {}
+    ok = 0
+    pkts.times do |i|
+      ready = IO.select([$sender],[],[],1)
+      rs = ready ? ready[0] : nil
+      if rs && r = rs[0]
+        ok += 1
+        str = $sender.read(PACKET_SIZE)
+        req = parse_command(str)
+        if req[:type] == "recv_pkt_ack" 
+          puts "收到預期外的ACK"
+          # Replay ack req
+          req[:is_request] = false
+          req[:is_reply] = true
+          $sender.send(pack_command(req),0)
+        else
+          if recvs.has_key? req[:task_no]
+            puts "重複編號：#{req[:task_no]}"
+          else
+            recvs[req[:task_no]] = req
+
+          end
+        end
+      else
+        puts "recv pkts逾時！重新傳送此單位"
+        expired = true
+        break
+      end
+    end
+    puts "在#{pkts}次中成功#{ok}次" if ok != pkts
+    if expired || recvs.keys.size != pkts
+      puts "recv pkts封包數量錯誤！預期：#{pkts}個，收到：#{recvs.keys.size}個，或者發生逾時！"
+      list = (0..pkts).to_a
+      puts "遺失清單：#{(list - recvs.keys).join(',')}"
+      # restart
+      size += send_size
+      next
+    end
+    # then server will wait for ack, send it back!
+    puts "剩餘大小：#{size}"
+    wait_recv_pkt_ack
+    #spin_time (rand(11)+5)*0.0001
+    spin_time 0.1
+  end
+  puts "已收到來自server的#{total_pkts}個封包，花費時間：#{Time.now - start}秒"
+  # cleanup 
+  $start_read = false
+end
+
 def run_detect_thread
   # 速度偵測
   $thr_detect.exit if $thr_detect
@@ -105,7 +227,7 @@ def run_detect_thread
           f.puts "#{Time.now.to_f} #{$speed_report}"
         end
       end
-      if $running
+      if $running && !$start_read
         # 顯示文字
         remain_str = ''
         case CLIENT_RANDOM_MODE
@@ -140,7 +262,7 @@ def run_monitor_thread
           end
         when /interval_add/
           data = line.split
-          puts "重新分配加速：#{sprintf("%+d",data[1].to_i*CLI_SEND_INTERVAL)}"
+          puts "重新分配加速：#{sprintf("%+d",data[1].to_i*CLI_SEND_INTERVAL)}" if !$start_read
           eval "$speed = $speed #{sprintf("%+d",data[1].to_i*CLI_SEND_INTERVAL)}"
         when /add/
           data = line.split
@@ -151,7 +273,7 @@ def run_monitor_thread
           eval "$speed = ($speed * #{data[1]}).round"
         when /assign/
           spd = line.split[1].to_i
-          puts "速度被指派為#{spd*8.0 / UNIT_MEGA} Mbits"
+          puts "速度被指派為#{spd*8.0 / UNIT_MEGA} Mbits" if !$start_read
           $assign_report = true
           $speed = spd * CLI_SEND_INTERVAL
         when /acc_rate (.*)/
@@ -173,6 +295,9 @@ def run_pattern_thread
           if line =~ /^[ \t]*#/ # comments
             next
           elsif line =~ /sleep (.*)/
+            # read 100MB
+            read_data_from_server(5*UNIT_MEGA)
+
             if new_added > 0
               printf("新增傳輸需求：%.6f MB(%d bytes)\n",new_added.to_f/UNIT_MEGA,new_added)
               $size_remain_mutex.synchronize do
@@ -194,6 +319,8 @@ def run_pattern_thread
           end
         end
       end
+      # read 100MB
+      read_data_from_server(1*UNIT_MEGA)
       if new_added > 0
         # 新增傳輸需求給sender
         printf("新增傳輸需求：%.6f MB(%d bytes)\n",new_added.to_f/UNIT_MEGA,new_added)
@@ -317,12 +444,17 @@ def check_is_confirm?(task_no,str)
   return req[:is_reply] && req[:type] == "send_confirm" && req[:task_no] == task_no && req[:sub_no] == [0]
 end
 
-def check_is_ack?(task_no,str)
+def check_is_send_ack?(task_no,str)
   req = parse_command(str)
   # confirm格式：reply + send_confirm + task_no + sub = [0]
   return req[:is_reply] && req[:type] == "send_ack" && req[:task_no] == task_no && req[:sub_no] == [0]
 end
 
+def check_is_recv_request_confirm?(size,str)
+  req = parse_command(str)
+  # confirm格式：reply + recv_confirm
+  return req[:is_reply] && req[:type] == "recv_confirm"  && req[:data_size] == size
+end
 def wait_for_confirm_task
   # 傳送要求
   send_request_for_send
@@ -380,7 +512,7 @@ def wait_for_ack
     if rs && r = rs[0]
       # can receive message, check if it's a confirm
       str = $sender.read(PACKET_SIZE)
-      if check_is_ack?($task_no,str)
+      if check_is_send_ack?($task_no,str)
         # it an ack, break loop
         break
       else
