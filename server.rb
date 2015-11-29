@@ -65,7 +65,7 @@ def send_ack_confirm(receiver,req)
   req[:is_reply] = true
 
   # TODO: timing
-  spin_time (rand(11)+5)*0.0001
+  spin_time (rand(11)+5)*0.001
   if DATA_PROTOCOL == :udp
     #$output.puts "傳送ACK給#{$addr}"
     receiver.send(pack_command(req),0,$addr[3],$addr[1])
@@ -91,6 +91,7 @@ def send_recv_request_confirm(receiver,req)
 
 end
 
+# 廢棄
 def send_recv_pkt_ack_request(receiver,o_req)
   req = {}
   req[:is_request] = true
@@ -255,6 +256,7 @@ begin
         puts "已收到recv request for #{req[:data_size]}"
         send_recv_request_confirm(receiver,req)
       when "recv_pkt_request"
+        spin_time (rand(11)+5)*0.001
         # 開始送一連續的封包
         if rand >= 0.0
           req[:data_size].times do |i|
@@ -262,31 +264,20 @@ begin
           end
           $output.puts "已傳送#{req[:data_size]}個封包"
         end
-        # 送ack request
-        # send the ack
-        spin_time 0.01
-        
-        send_recv_pkt_ack_request(receiver,req)
-        loop do
-          ready = IO.select([receiver],[],[],1)
-          rs = ready ? ready[0] : nil
-          if rs && r = rs[0]
-            # can receive message, check if it's a confirm
-            str = receiver.read(PACKET_SIZE)
-            req2 = parse_command(str)
-            if req2[:is_reply] && req2[:type] == "recv_pkt_ack" 
-              # ok,break loop
-              break
-            else
-              # Not a ack
-              puts "收到非recv ack request，忽略"
-            end
+        # 等client的ack 
+        str = receiver.read(PACKET_SIZE)
+        ack_req = parse_command(str)
+        if ack_req[:is_request] && ack_req[:type] == "recv_pkt_ack"
+          $output.puts "已收到ACK，回傳"
+          ack_req[:is_reply] = true
+          ack_req[:is_request] = false
+          if DATA_PROTOCOL == :udp
+            receiver.send(pack_command(ack_req),0,$addr[3],$addr[1])
           else
-            # Timedout
-            puts "等待recv ack req逾時"
+            receiver.send(pack_command(ack_req),0)
           end
-          # 重送：超過時間或收到的不是確認訊息
-          send_recv_pkt_ack_request(receiver,req)
+        else
+          $output.puts "警告：收到非ack的封包"
         end
         
         $state = :wait

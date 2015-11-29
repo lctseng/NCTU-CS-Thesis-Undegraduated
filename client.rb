@@ -130,12 +130,20 @@ def wait_for_recv_request(size)
 end
 
 def wait_recv_pkt_ack
-  # Replay ack req
+  # send an ack to server 
+  req = {}
+  req[:is_request] = true
+  req[:type] = "recv_pkt_ack"
+  $sender.send(pack_command(req),0)
+  # read ack req
   str = $sender.read(PACKET_SIZE)
   req = parse_command(str)
-  req[:is_request] = false
-  req[:is_reply] = true
-  $sender.send(pack_command(req),0)
+  if req[:is_reply] && req[:type] == "recv_pkt_ack"
+    #ok
+    puts "已收到來自server的ack"
+  else
+    puts "警告：收到server的非ack封包"
+  end
 end
 
 def read_data_from_server(size)
@@ -147,6 +155,7 @@ def read_data_from_server(size)
   total_pkts = 0
   puts "開始接收資料：#{size}"
   while size > 0
+    puts "開始等待下一波的資料接受"
     send_size = [size,CLI_ACK_SLICE].min
     size -= send_size
     # compute pkts
@@ -171,13 +180,16 @@ def read_data_from_server(size)
           req[:is_request] = false
           req[:is_reply] = true
           $sender.send(pack_command(req),0)
-        else
+        elsif req[:type] == "recv_pkt_reply" 
           if recvs.has_key? req[:task_no]
             puts "重複編號：#{req[:task_no]}"
           else
+            #puts "收到編號：#{req[:task_no]}"
             recvs[req[:task_no]] = req
 
           end
+        else
+          puts "收到不明封包：#{req}"
         end
       else
         puts "recv pkts逾時！重新傳送此單位"
@@ -192,15 +204,16 @@ def read_data_from_server(size)
       puts "遺失清單：#{(list - recvs.keys).join(',')}"
       # restart
       size += send_size
+      wait_recv_pkt_ack
       next
     end
     # then server will wait for ack, send it back!
     puts "剩餘大小：#{size}"
+    spin_time (rand(11)+5)*0.001
     wait_recv_pkt_ack
-    #spin_time (rand(11)+5)*0.0001
-    spin_time 0.1
   end
-  puts "已收到來自server的#{total_pkts}個封包，花費時間：#{Time.now - start}秒"
+  time = Time.now - start
+  puts "已收到來自server的#{total_pkts}個封包，花費時間：#{time}秒，傳輸速率：#{sprintf("%6.3f",total_pkts*PACKET_SIZE*8.0/time/UNIT_MEGA)}Mbps"
   # cleanup 
   $start_read = false
 end
@@ -296,7 +309,7 @@ def run_pattern_thread
             next
           elsif line =~ /sleep (.*)/
             # read 100MB
-            read_data_from_server(5*UNIT_MEGA)
+            read_data_from_server(100*UNIT_MEGA)
 
             if new_added > 0
               printf("新增傳輸需求：%.6f MB(%d bytes)\n",new_added.to_f/UNIT_MEGA,new_added)
@@ -320,7 +333,7 @@ def run_pattern_thread
         end
       end
       # read 100MB
-      read_data_from_server(1*UNIT_MEGA)
+      read_data_from_server(100*UNIT_MEGA)
       if new_added > 0
         # 新增傳輸需求給sender
         printf("新增傳輸需求：%.6f MB(%d bytes)\n",new_added.to_f/UNIT_MEGA,new_added)
