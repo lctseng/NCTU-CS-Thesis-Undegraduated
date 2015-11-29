@@ -304,16 +304,13 @@ def run_pattern_thread
   $thr_pattern.exit if $thr_pattern
   if CLIENT_RANDOM_MODE == :pattern
     $thr_pattern = Thread.new do
-      new_added = 0
+      new_added = PACKET_SIZE
       File.open(sprintf(CLIENT_PATTERN_NAME_FORMAT,$port)) do |f|
         while line = f.gets
           puts "讀取pattern：#{line}"
           if line =~ /^[ \t]*#/ # comments
             next
           elsif line =~ /sleep (.*)/
-            # read 100MB
-            read_data_from_server((rand(5)+1)*UNIT_MEGA)
-
             if new_added > 0
               printf("新增傳輸需求：%.6f MB(%d bytes)\n",new_added.to_f/UNIT_MEGA,new_added)
               $size_remain_mutex.synchronize do
@@ -330,8 +327,24 @@ def run_pattern_thread
             end
             sleep_time = $1.to_f
             sleep sleep_time
-          else
-            new_added += line.to_i
+          elsif line =~ /write (.*)/
+            new_added += $1.to_i
+          elsif line =~ /read (.*)/
+            if new_added > 0
+              printf("新增傳輸需求：%.6f MB(%d bytes)\n",new_added.to_f/UNIT_MEGA,new_added)
+              $size_remain_mutex.synchronize do
+                $size_remaining += new_added
+                $pattern_size_ready.signal
+              end
+              new_added = 0
+              # 等待sender傳送結束
+              $size_remain_mutex.synchronize do
+                $request_finish.wait($size_remain_mutex)
+              end
+              puts "本次需求傳輸結束！等待下次需求..."
+
+            end
+            read_data_from_server($1.to_i)
           end
         end
       end
