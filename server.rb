@@ -23,6 +23,9 @@ else
   puts "使用標準輸出"
   $output = $stdout
 end
+if SERVER_RANDOM_FIXED_SEED
+  srand(port)
+end
 
 
 case DATA_PROTOCOL

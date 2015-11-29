@@ -36,8 +36,14 @@ def spin_time(wait_time)
 end
 
 def parse_command(str)
+  if str.size < PACKET_SIZE
+      $output.puts "封包大小錯誤！"
+  end
   req = {}
-  main_type,type,task,sub,data_size,pad = str.split(';')
+  valid,main_type,type,task,sub,data_size,pad = str.split(';')
+  if valid != PKACKET_VALIDATOR
+      $output.puts "封包內容錯誤！"
+  end
   # 判斷大類別
   if main_type == "request"
     req[:is_request] = true
@@ -69,7 +75,7 @@ def pack_command(req)
   # convert
   main_type = req[:is_request] ? "request" : "reply"
   sub_no = req[:sub_no].join(',')
-  info = "#{main_type};#{req[:type]};#{req[:task_no]};#{sub_no};#{req[:data_size]};"
+  info = "#{PKACKET_VALIDATOR};#{main_type};#{req[:type]};#{req[:task_no]};#{sub_no};#{req[:data_size]};"
   pad = '1' * (PACKET_SIZE - info.size)
   return info + pad
 end

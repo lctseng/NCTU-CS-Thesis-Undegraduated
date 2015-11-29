@@ -16,7 +16,9 @@ DATA_PROTOCOL = ENABLE_CONTROL ? :udp : :tcp
 PACKET_SIZE = 1400
 MONITOR_SHOW_INFO = true
 LINE_UTIL_RATE = MAX_BW_UTIL_RATE
+PKACKET_VALIDATOR = "VALIDATOR"
 DEBUG_TIMING = false
+
 
 # Contorller端設置
 CTRL_QUEUE_DRAW_BAR_DIV = 60.0
@@ -36,6 +38,9 @@ CTRL_BALANCE_CHANGE_RATE = -0.5
 CTRL_ASSIGN_BASELINE = 100000
 CTRL_HOST_COUNT_LOG_BASE = 2.0
 CTRL_SW_SPEED_LIMIT_ADJUST = 1.0 # 1.0 = precise
+
+# Server
+SERVER_RANDOM_FIXED_SEED = true
 
 # Client端設置
 CLIENT_RANDOM_MODE = :pattern
@@ -67,7 +72,7 @@ def add_qos_info(sw,eth,ingress_list,udp_port = 5001..5008)
 end
 
 LINK_DELAY = {}
-
+FIXED_FLOW_ENTRY = []
 
 if !defined?(NO_TYPE_REQUIRED) || !NO_TYPE_REQUIRED
   _mode = ARGV[0]
@@ -173,13 +178,29 @@ when /linearTopoK4N2-multi/i
   STARTING_ORDER = ["s2-eth1","s3-eth3","s4-eth3","s2-eth2","s1-eth3"]
 
 when /linearTopoK4N2-single/i
+  
+  
   # Forward
   add_qos_info('s1','1',[2,3])
   add_qos_info('s2','3',[1,2,4])
   add_qos_info('s3','3',[1,2,4])
   add_qos_info('s4','3',[1,2])
-  # Backward  
-  #add_qos_info('s1','2',[1])
+  # Backward 
+  # s1 
+  add_qos_info('s1','2',[1],5005..5005)
+  add_qos_info('s1','3',[1],[5002,5003,5004,5006,5007,5008])
+  # s2
+  add_qos_info('s2','1',[3],5002..5002)
+  add_qos_info('s2','2',[3],5006..5006)
+  add_qos_info('s2','4',[3],[5003,5004,5007,5008])
+  # s3
+  add_qos_info('s3','1',[3],5003..5003)
+  add_qos_info('s3','2',[3],5007..5007)
+  add_qos_info('s3','4',[3],[5004,5008])
+  # s4
+  add_qos_info('s4','1',[3],5004..5004)
+  add_qos_info('s4','2',[3],5008..5008)
+
 
   #NO_SPEED_LIMIT_FOR = ["s2-eth3","s3-eth3","s4-eth3"]
 

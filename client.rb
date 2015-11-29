@@ -23,7 +23,7 @@ INIT_SPEED_PER_INTERVAL = INIT_SPEED_PER_SECOND * CLI_SEND_INTERVAL
 
 
 
-
+$output = $stdout
 $host = ARGV[0]
 $port = ARGV[1].to_i
 $size_remain_mutex = Mutex.new
@@ -312,7 +312,7 @@ def run_pattern_thread
             next
           elsif line =~ /sleep (.*)/
             # read 100MB
-            read_data_from_server((rand(5)+100)*UNIT_MEGA)
+            read_data_from_server((rand(5)+1)*UNIT_MEGA)
 
             if new_added > 0
               printf("新增傳輸需求：%.6f MB(%d bytes)\n",new_added.to_f/UNIT_MEGA,new_added)
@@ -336,7 +336,7 @@ def run_pattern_thread
         end
       end
       # read 100MB
-      read_data_from_server((rand(5)+100)*UNIT_MEGA)
+      read_data_from_server((rand(5)+1)*UNIT_MEGA)
       if new_added > 0
         # 新增傳輸需求給sender
         printf("新增傳輸需求：%.6f MB(%d bytes)\n",new_added.to_f/UNIT_MEGA,new_added)
