@@ -20,8 +20,9 @@ class SubServer
     def initialize(port)
         @port = port
         @socket_name = "./unix_sockets/s-#{port}.sock"
-        `rm #{@socket_name}`
+        `rm -f #{@socket_name}`
         @sock_serv = UNIXServer.new(@socket_name)
+        @last_line = ''
         create_process
     end
 
@@ -32,13 +33,12 @@ class SubServer
 
     # 讀取最新的一行
     def read
-        line = ''
-        while line.empty?
-            while @io_r.ready?
-                line = @io_r.gets
-            end
-        end
-        line
+      if @io_r.ready?
+        @last_line = line = @io_r.gets
+      else
+        line = @last_line
+      end
+      line
     end
     # 結束
     def terminate
@@ -68,10 +68,10 @@ def start_read_server_info
         loop do
             puts "====各Server資訊===="
             $servers.each do |port,serv|
-                print "Port #{port}:"
+                print "P #{port}:"
                 puts serv.read
             end
-            #sleep 0.5
+            sleep 0.5
         end
     end
 end

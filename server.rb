@@ -47,7 +47,7 @@ def send_request_confirm(receiver,req)
   req[:is_reply] = true
 
   if DATA_PROTOCOL == :udp
-    $output.puts "傳送要求給#{$addr}"
+    #$output.puts "傳送要求給#{$addr}"
     receiver.send(pack_command(req),0,$addr[3],$addr[1])
   else
     receiver.send(pack_command(req),0)
@@ -111,9 +111,9 @@ def send_recv_pkt_data(receiver,o_req,index)
   req[:task_no] = index
   req[:data_size] = o_req[:data_size]
   if DATA_PROTOCOL == :udp
-    receiver.send(pack_command(req),0,$addr[3],$addr[1])
+    return receiver.send(pack_command(req),0,$addr[3],$addr[1])
   else
-    receiver.send(pack_command(req),0)
+    return receiver.send(pack_command(req),0)
   end
 end
 
@@ -128,16 +128,23 @@ def reset_variables
   $sub_count = 0
   $size_to_receive = 0
   $data_size_lost = 0
+  $total_send = 0
+  $last_tota_send = 0
+  $send_loss = 0
 end
 
 reset_variables
 
 Thread.new do 
   loop do
-    diff = $size_total - $last_size
+    r_diff = $size_total - $last_size
     $last_size = $size_total
-    $output.printf("總大小： %.6f Mbit，",$size_total * 8.0 / UNIT_MEGA)
-    $output.puts "區間傳輸大小：#{(sprintf("%3.3f",diff * 8.0 / UNIT_MEGA))} Mbit，遺失封包數：#{$loss}"
+    w_diff = $total_send - $last_tota_send
+    $last_tota_send = $total_send
+    $output.printf("[RX]總:%11.3f Mbit，",$size_total * 8.0 / UNIT_MEGA)
+    $output.print "區:#{(sprintf("%8.3f",r_diff * 8.0 / UNIT_MEGA))} Mbit，遺失:#{sprintf('%4d',$loss)}p "
+    $output.printf("[TX]總:%11.3f Mbit，",$total_send * 8.0 / UNIT_MEGA)
+    $output.puts "區:#{(sprintf("%8.3f",w_diff * 8.0 / UNIT_MEGA))} Mbit，遺失:#{sprintf('%4d',$send_loss)}p"
     sleep 1
   end
 end
@@ -166,7 +173,7 @@ begin
         case $state
         when :wait
           # 新的request
-          $output.puts "收到新的send request：#{req[:task_no]}"
+          #$output.puts "收到新的send request：#{req[:task_no]}"
           $task_no = req[:task_no]
           $sub_count = 1
           $size_to_receive = 0
@@ -235,7 +242,7 @@ begin
               if req[:data_size] <= 0
                 # 結束接收
                 #puts "結束#{$task_no}的資料接收，總共遺失資料：#{$current_data_lost}bytes"
-                $output.puts "結束#{$task_no}的資料接收"
+                #$output.puts "結束#{$task_no}的資料接收"
                 $task_no = 0
                 $state = :wait
               end
@@ -253,22 +260,22 @@ begin
       when "recv_request"
         # 等等要送資料
         $state = :send
-        puts "已收到recv request for #{req[:data_size]}"
+        #puts "已收到recv request for #{req[:data_size]}"
         send_recv_request_confirm(receiver,req)
       when "recv_pkt_request"
         spin_time (rand(11)+5)*0.001
         # 開始送一連續的封包
         if rand >= 0.0
           req[:data_size].times do |i|
-            send_recv_pkt_data(receiver,req,i)
+            $total_send += send_recv_pkt_data(receiver,req,i)
           end
-          $output.puts "已傳送#{req[:data_size]}個封包"
+          #$output.puts "已傳送#{req[:data_size]}個封包"
         end
         # 等client的ack 
         str = receiver.read(PACKET_SIZE)
         ack_req = parse_command(str)
         if ack_req[:is_request] && ack_req[:type] == "recv_pkt_ack"
-          $output.puts "已收到ACK，回傳"
+          #$output.puts "已收到ACK，回傳"
           ack_req[:is_reply] = true
           ack_req[:is_request] = false
           if DATA_PROTOCOL == :udp
