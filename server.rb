@@ -65,7 +65,7 @@ def send_ack_confirm(receiver,req)
   req[:is_reply] = true
 
   # TODO: timing
-  spin_time (rand(11)+5)*0.001
+  spin_time (rand(5)+1)*0.001
   if DATA_PROTOCOL == :udp
     #$output.puts "傳送ACK給#{$addr}"
     receiver.send(pack_command(req),0,$addr[3],$addr[1])
@@ -141,10 +141,15 @@ Thread.new do
     $last_size = $size_total
     w_diff = $total_send - $last_tota_send
     $last_tota_send = $total_send
+    if $total_send == 0
+      w_loss = 0.0
+    else
+      w_loss = ($send_loss*PACKET_SIZE)/($total_send/100.0)
+    end
     $output.printf("[RX]總:%11.3f Mbit，",$size_total * 8.0 / UNIT_MEGA)
     $output.print "區:#{(sprintf("%8.3f",r_diff * 8.0 / UNIT_MEGA))} Mbit，遺失:#{sprintf('%4d',$loss)}p "
     $output.printf("[TX]總:%11.3f Mbit，",$total_send * 8.0 / UNIT_MEGA)
-    $output.puts "區:#{(sprintf("%8.3f",w_diff * 8.0 / UNIT_MEGA))} Mbit，遺失:#{sprintf('%4d',$send_loss)}p"
+    $output.puts "區:#{(sprintf("%8.3f",w_diff * 8.0 / UNIT_MEGA))} Mbit，遺失:#{sprintf("%6dp(%7.4f%%)",$send_loss,w_loss)}"
     sleep 1
   end
 end
@@ -263,7 +268,7 @@ begin
         #puts "已收到recv request for #{req[:data_size]}"
         send_recv_request_confirm(receiver,req)
       when "recv_pkt_request"
-        spin_time (rand(11)+5)*0.001
+        spin_time (rand(5)+1)*0.001
         # 開始送一連續的封包
         if rand >= 0.0
           req[:data_size].times do |i|
@@ -278,6 +283,7 @@ begin
           #$output.puts "已收到ACK，回傳"
           ack_req[:is_reply] = true
           ack_req[:is_request] = false
+          $send_loss += ack_req[:data_size]
           if DATA_PROTOCOL == :udp
             receiver.send(pack_command(ack_req),0,$addr[3],$addr[1])
           else
