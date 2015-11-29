@@ -68,7 +68,7 @@ def send_ack_confirm(receiver,req)
   req[:is_reply] = true
 
   # TODO: timing
-  spin_time (rand(5)+1)*0.001
+  spin_time (rand(3)+1)*0.0001
   if DATA_PROTOCOL == :udp
     #$output.puts "傳送ACK給#{$addr}"
     receiver.send(pack_command(req),0,$addr[3],$addr[1])
