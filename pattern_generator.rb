@@ -138,10 +138,15 @@ end
 def generate_bursty_pattern(f,pattern_time)
   while pattern_time > 0
     if true
-      f.puts rand(5*UNIT_MEGA) + 5*UNIT_MEGA
-      
-      sleep_time = [rand(400)/100.0 + 5,pattern_time].min
-      pattern_time = write_sleep(f,pattern_time,sleep_time)
+      if rand > 0.5
+        f.puts "write #{rand(15*UNIT_MEGA) + 5*UNIT_MEGA}"
+      else
+        f.puts "read #{rand(15*UNIT_MEGA) + 5*UNIT_MEGA}"
+      end
+      if rand > 0.5 
+        sleep_time = [rand(400)/100.0 + 5,pattern_time].min
+        pattern_time = write_sleep(f,pattern_time,sleep_time)
+      end
     end
   end
 end
@@ -201,8 +206,8 @@ def generate_pattern(out_name,pattern_time)
     #generate_default_pattern(f,pattern_time)
     #generate_elephant_pattern(f,pattern_time)
     #generate_elephant_long_sleep_pattern(f,pattern_time,{long_time: 10,long_rate: 0.01,large_rate: 0.5,small_rate: 0.9}) 
-    #generate_bursty_pattern(f,pattern_time)
-    generate_by_patching_files(f,pattern_time)
+    generate_bursty_pattern(f,pattern_time)
+    #generate_by_patching_files(f,pattern_time)
     #generate_long_flow(f,pattern_time)
   end
 end
