@@ -1,6 +1,7 @@
 #!/usr/bin/env ruby 
 
-require_relative 'qos-info'
+require_relative 'config'
+require 'qos-info'
 
 pipes = {}
 children = {}

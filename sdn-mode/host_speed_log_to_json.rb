@@ -1,7 +1,8 @@
 #!/usr/bin/env ruby  
+require_relative 'confg'
 require 'json'
 NO_TYPE_REQUIRED = true 
-require_relative 'qos-info'
+require 'qos-info'
 TIME_BASE = ARGV[1].to_f
 
 def process_port_log(port)

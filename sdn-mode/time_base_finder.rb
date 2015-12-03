@@ -1,5 +1,6 @@
 #!/usr/bin/env ruby 
-require_relative 'qos-info'
+require_relative 'config'
+require 'qos-info'
 
 $base_time = Time.now.to_f
 

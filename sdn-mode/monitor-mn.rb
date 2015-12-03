@@ -1,7 +1,9 @@
 #!/usr/bin/env ruby 
 
+require_relative 'config'
+
 require 'socket'
-require_relative 'qos-info'
+require 'qos-info'
 
 $DEBUG = true
 

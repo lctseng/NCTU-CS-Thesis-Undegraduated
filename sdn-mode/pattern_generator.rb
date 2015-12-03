@@ -1,5 +1,6 @@
 #!/usr/bin/env ruby 
-require_relative 'qos-info'
+require_relative 'config'
+require 'qos-info'
 
 out_name = ARGV[0]
 pattern_time = ARGV[1].to_f

@@ -1,7 +1,7 @@
 #!/usr/bin/env ruby 
 
-require_relative 'qos-info'
-require_relative 'qos-lib'
+require_relative 'config'
+require 'qos-lib'
 
 pipes = {}
 children = {}
@@ -25,7 +25,7 @@ for n in 2..8
     # child
     #$stdin.reopen pipe[0]
     $stdout.reopen pipe[1]
-    Process.exec "ssh -t root@#{ip} 'cd monitor-mn;ruby client.rb #{server_ip} #{port}'"
+    Process.exec "ssh -t root@#{ip} 'cd monitor-mn/sdn-mode;ruby client.rb #{server_ip} #{port}'"
   end
 end
 # Read from all 

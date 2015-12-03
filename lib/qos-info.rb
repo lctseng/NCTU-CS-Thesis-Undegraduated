@@ -82,7 +82,7 @@ if !defined?(NO_TYPE_REQUIRED) || !NO_TYPE_REQUIRED
   end
 
   if _mode &&  _mode =~ /__last__/i
-    File.open("last_setup_mode.tmp") do |f|
+    File.open('/tmp/last_setup_mode.tmp') do |f|
       str = f.gets
       _mode = str if str
     end

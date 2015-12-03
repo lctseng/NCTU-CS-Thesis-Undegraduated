@@ -1,11 +1,10 @@
 #!/usr/bin/env ruby 
 
+require_relative 'config'
 require 'socket'
 require 'thread'
 require 'fileutils'
-require_relative 'host-info'
-require_relative 'qos-info'
-require_relative 'qos-lib'
+require 'qos-lib'
 
 $DEBUG = true
 
