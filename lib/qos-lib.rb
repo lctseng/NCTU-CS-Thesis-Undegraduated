@@ -1,5 +1,7 @@
 require_relative 'qos-info'
 
+Thread.abort_on_exception = true
+
 class Hash
 
   def ensure_key(key,value)

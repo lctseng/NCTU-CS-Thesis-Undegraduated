@@ -1,13 +1,12 @@
 #!/usr/bin/env ruby
 require_relative 'host-info'
 
-$DEBUG = true
 # 常數
 UNIT_KILO = 10**3
 ENABLE_CONTROL = true
 UNIT_MEGA = UNIT_KILO**2
 MAX_TOTAL_SPEED = UNIT_KILO**3 # 整體最大速度
-MAX_SPEED = 100*UNIT_MEGA # 最大速度
+MAX_SPEED = 1000*UNIT_MEGA # 最大速度
 MAX_SPEED_M = MAX_SPEED / UNIT_MEGA
 CLEAR_OLD = true # 是否刪除舊資料
 MAX_NOTIFICATION_INTERVAL = 0.1
@@ -65,6 +64,12 @@ SWITCH_LOG_NAME_JSON_FORMAT = "json/switch_%s_%s.json"
 
 
 
+# DCB Mode
+DCB_SERVER_BUFFER_PKT_SIZE = 10000 # server application memory buffer for 100000 pkts 
+DCB_SERVER_BUFFER_STOP_THRESHOLD = DCB_SERVER_BUFFER_PKT_SIZE * 0.5
+DCB_SIGNAL_SENDER_PORT = 9001
+
+
 # QoS資料
 QOS_INFO = {}
 def add_qos_info(sw,eth,ingress_list,udp_port = 5001..5008)
@@ -85,6 +90,10 @@ if !defined?(NO_TYPE_REQUIRED) || !NO_TYPE_REQUIRED
     File.open('/tmp/last_setup_mode.tmp') do |f|
       str = f.gets
       _mode = str if str
+    end
+  else
+    File.open('/tmp/last_setup_mode.tmp','w') do |f|
+      f.puts _mode
     end
   end
 else
