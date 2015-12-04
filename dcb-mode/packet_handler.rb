@@ -14,14 +14,13 @@ class PacketHandler
     loop do
       n+= 1
       #puts n
-      sleep 0.001
-      execute_buffer
-      #pkt = extract_next_packet
-      #if pkt
-      #  process_packet(pkt)
-      #elsif !@wait_for_packet
-      #  execute_next_action
-      #end
+      #execute_buffer
+      pkt = extract_next_packet
+      if pkt
+        process_packet(pkt)
+      elsif !@wait_for_packet
+        execute_next_action
+      end
     end
   end
 
@@ -32,10 +31,10 @@ class PacketHandler
     end
   end
 
-  def extract_next_packet
+  def extract_next_packet(timeout = nil)
     # process data in block
     if @block_buf.empty?
-      @block_buf = @pkt_buf.extract_block(@port)
+      @block_buf = @pkt_buf.extract_block(@port,timeout)
       if !@block_buf.empty?
         #puts "#{@port} Extracted block#: #{@block_buf.size}"
         #sleep (rand(3)+1)*0.0001
@@ -55,10 +54,10 @@ class PacketHandler
     return nil
   end
 
-  def process_packet(pkt)
+  def process_data_packet(pkt)
     task_n = pkt[:req][:task_no]
     if task_n != @task_cnt
-      puts "錯誤的大編號：#{task_n}，預期：#{@task_cnt}"
+      #puts "錯誤的大編號：#{task_n}，預期：#{@task_cnt}"
       CLI_ACK_SLICE_PKT.times do |i|
         @recv_buff[i] = false
       end
@@ -84,9 +83,9 @@ class PacketHandler
         end
         @recv_count = 0
         # IO 
-        #$pkt_buf.disk_lock.synchronize do
-          #sleep 0.1
-        #end
+        $pkt_buf.disk_lock.synchronize do
+          sleep 0.1
+        end
         @task_cnt += 1
       else
         # not full
@@ -94,8 +93,26 @@ class PacketHandler
     end
   end
 
-  def write_packet_req(req)
-    @pkt_buf.write_packet_req(@port,req)
+  def process_ack_request(pkt)
+    #puts "處理ACK request，給：#{pkt[:peer]}"
+    req = pkt[:req]
+    req[:is_request] = false
+    req[:is_reply] = true
+    write_packet_req(req,*(pkt[:peer]))
+  end
+
+  def process_packet(pkt)
+    #puts pkt[:msg]
+    case pkt[:req][:type]
+    when "data send"
+      process_data_packet(pkt)
+    when "data ack"
+      process_ack_request(pkt)
+    end
+  end
+
+  def write_packet_req(req,*peer)
+    @pkt_buf.write_packet_req(@port,req,*peer)
   end
 
 end
@@ -103,6 +120,7 @@ end
 class PassivePacketHandler < PacketHandler
   def initialize(pkt_buf,port)
     super(pkt_buf,port)
+    pkt_buf.send_go
   end
 end
 
@@ -118,14 +136,42 @@ class ActivePacketHandler < PacketHandler
       CLI_ACK_SLICE_PKT.times do |j|
         req = {}
         req[:is_request] = true
+        req[:type] = "data send"
         req[:task_no] = i
         req[:sub_no] = [j]
         write_packet_req(req)
       end
-      sleep 0.2
+      send_and_wait_for_ack
+      #sleep 0.03
       i += 1
     end
   end
+  
+  def write_ack_req
+    req = {}
+    req[:is_request] = true
+    req[:type] = "data ack"
+    #puts "傳輸資料ACK"
+    write_packet_req(req)
+  end
+
+  def send_and_wait_for_ack
+    write_ack_req
+    loop do
+      # get next
+      pkt = extract_next_packet(1)
+      if pkt && pkt[:req][:type] == "data ack"
+        #puts "收到ACK reply"
+        break
+      else
+        # Timedout
+        puts "重新傳輸ACK request"
+        write_ack_req
+
+      end
+    end
+  end
+
   def execute_next_action
 
   end

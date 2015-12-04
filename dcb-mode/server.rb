@@ -11,9 +11,11 @@ require 'signal_sender'
 require 'packet_handler'
 
 
-SERVER_OPEN_PORT_RANGE = 5002..5008
+#SERVER_OPEN_PORT_RANGE = 5002..5008
 #SERVER_OPEN_PORT_RANGE = 5005..5005
 #SERVER_OPEN_PORT_RANGE = 5002..5002
+#SERVER_OPEN_PORT_RANGE = 5008..5008
+SERVER_OPEN_PORT_RANGE = 5005..5008
 
 if SERVER_RANDOM_FIXED_SEED
   srand(0)
@@ -27,6 +29,11 @@ def run_port_thread(port)
   end
 end
 
+def run_port_read_thread(port)
+  thr = Thread.new do
+    $pkt_buf.run_port_receive_loop(port)
+  end
+end
 def run_read_thread
   thr = Thread.new do
     $pkt_buf.run_receive_loop
@@ -53,8 +60,14 @@ else
   $signal_sender.bind_port
   $pkt_buf = PacketBuffer.new("0.0.0.0",SERVER_OPEN_PORT_RANGE)
   $pkt_buf.notifier = $signal_sender
-  thr_read= run_read_thread
+  $signal_sender.pkt_buf = $pkt_buf
   thr_accept = run_accept_thread
+  
+  #thr_read = []
+  #(SERVER_OPEN_PORT_RANGE).each do |port|
+  #  thr_read << run_port_read_thread(port)
+  #end
+  thr_read = run_read_thread
   
   thr_port = []
   (SERVER_OPEN_PORT_RANGE).each do |port|
@@ -93,9 +106,9 @@ else
 
           text = "#{port}:"
           text += sprintf("[RX]總:%11.3f Mbit，",cur_rx * 8.0 / UNIT_MEGA)
-          text += "區:#{(sprintf("%8.3f",rx_diff * 8.0 / UNIT_MEGA))} Mbit，遺失:#{sprintf("%4dp (%6.4f%%)",rx_loss,rx_loss_rate)} "
+          text += "區:#{(sprintf("%8.3f",rx_diff * 8.0 / UNIT_MEGA))} Mbit，遺失:#{sprintf("%6dp (%6.4f%%)",rx_loss,rx_loss_rate)} "
           text += sprintf("[TX]總:%11.3f Mbit，",cur_tx * 8.0 / UNIT_MEGA)
-          text += "區:#{(sprintf("%8.3f",tx_diff * 8.0 / UNIT_MEGA))} Mbit，遺失:#{sprintf('%4d',$pkt_buf.total_tx_loss[port])}p "
+          text += "區:#{(sprintf("%8.3f",tx_diff * 8.0 / UNIT_MEGA))} Mbit，遺失:#{sprintf('%6d',$pkt_buf.total_tx_loss[port])}p "
           texts << text
         end
       end

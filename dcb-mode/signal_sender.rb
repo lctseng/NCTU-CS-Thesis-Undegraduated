@@ -5,9 +5,10 @@ require 'qos-lib'
 
 class SignalSender
 
-  attr_reader :sender_lock
-  attr_accessor :sneders
+  attr_reader :peer_lock
+  attr_accessor :peers
   attr_reader :main_sock
+  attr_accessor :pkt_buf
 
   def initialize
     @peers = []
@@ -23,10 +24,18 @@ class SignalSender
     ready[0].each do |sock|
       if sock == @main_sock
         new_sock = @main_sock.accept
+        #puts "New receiver connected"
+        if @pkt_buf
+          case @pkt_buf.previous_state
+          when :go
+            new_sock.puts "GO #{Time.now}"
+          when :stop
+            new_sock.puts "STOP #{Time.now}"
+          end
+        end
         @peer_lock.synchronize do 
           @peers << new_sock
         end
-        #puts "New receiver connected"
       else # peer sock
         str = sock.recv(PACKET_SIZE)
         if str.empty?
