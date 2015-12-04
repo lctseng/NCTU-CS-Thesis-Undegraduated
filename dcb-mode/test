@@ -1,0 +1,28 @@
+
+      @data_lock.synchronize do
+        CLI_ACK_SLICE_PKT.times do 
+          noread = true
+          @peers.each do |port,sock|
+            begin 
+              pack = sock.recvfrom_nonblock(PACKET_SIZE)  #=> ["aaa", ["AF_INET", 33302, "localhost.localdomain", "127.0.0.1"]]
+              size = pack[0].size
+              pkt = {}
+              pkt[:port] = port
+              pkt[:size] = size
+              pkt[:req] = parse_command(pack[0])
+              pkt[:msg] = pack[0]
+              if store_packet(pkt)
+                # store success 
+              else 
+                @total_rx_loss[port] += 1
+                 puts "Packet Buffer full when adding packet from #{port}!"
+              end
+              noread = false
+            rescue IO::WaitReadable
+            end
+          end
+          if noread
+            #print "No read"
+            sleep 0.00001
+          end
+        end

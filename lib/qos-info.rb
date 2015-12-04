@@ -54,6 +54,7 @@ CLI_SEND_INTERVAL = 0.005
 CLI_SEND_DETECT_INTERVAL = CLI_SEND_INTERVAL / 10.0
 CLI_WAIT_FOR_ACK = !DEBUG_TIMING
 CLI_ACK_SLICE = 256 * UNIT_KILO
+CLI_ACK_SLICE_PKT = (CLI_ACK_SLICE.to_f / PACKET_SIZE).ceil
 
 
 # LOG 設置
@@ -67,6 +68,7 @@ SWITCH_LOG_NAME_JSON_FORMAT = "json/switch_%s_%s.json"
 # DCB Mode
 DCB_SERVER_BUFFER_PKT_SIZE = 10000 # server application memory buffer for 100000 pkts 
 DCB_SERVER_BUFFER_STOP_THRESHOLD = DCB_SERVER_BUFFER_PKT_SIZE * 0.5
+DCB_SERVER_BUFFER_GO_THRESHOLD = DCB_SERVER_BUFFER_PKT_SIZE * 0.2
 DCB_SIGNAL_SENDER_PORT = 9001
 
 
@@ -86,14 +88,16 @@ if !defined?(NO_TYPE_REQUIRED) || !NO_TYPE_REQUIRED
     exit
   end
 
-  if _mode &&  _mode =~ /__last__/i
-    File.open('/tmp/last_setup_mode.tmp') do |f|
-      str = f.gets
-      _mode = str if str
-    end
-  else
-    File.open('/tmp/last_setup_mode.tmp','w') do |f|
-      f.puts _mode
+  if _mode
+    if _mode =~ /__last__/i
+      File.open('/root/last_setup_mode.tmp') do |f|
+        str = f.gets
+        _mode = str if str
+      end
+    else
+      File.open('/root/last_setup_mode.tmp','w') do |f|
+        f.puts _mode
+      end
     end
   end
 else
@@ -187,8 +191,8 @@ when /linearTopoK4N2-multi/i
   STARTING_ORDER = ["s2-eth1","s3-eth3","s4-eth3","s2-eth2","s1-eth3"]
 
 when /linearTopoK4N2-single/i
-  
-  
+
+
   # Forward
   add_qos_info('s1','1',[2,3])
   add_qos_info('s2','3',[1,2,4])

@@ -7,12 +7,13 @@ require 'socket'
 require 'thread'
 require 'qos-lib'
 require 'packet_buffer'
-require 'signal_receiver'
+require 'signal_sender'
 require 'packet_handler'
 
 
 SERVER_OPEN_PORT_RANGE = 5002..5008
 #SERVER_OPEN_PORT_RANGE = 5005..5005
+#SERVER_OPEN_PORT_RANGE = 5002..5002
 
 if SERVER_RANDOM_FIXED_SEED
   srand(0)
@@ -49,11 +50,12 @@ if pid = fork
 else
   pipe_r.close
   $stdout.reopen pipe_w
+  $signal_sender.bind_port
   $pkt_buf = PacketBuffer.new("0.0.0.0",SERVER_OPEN_PORT_RANGE)
+  $pkt_buf.notifier = $signal_sender
   thr_read= run_read_thread
   thr_accept = run_accept_thread
-
-
+  
   thr_port = []
   (SERVER_OPEN_PORT_RANGE).each do |port|
     thr_port << run_port_thread(port)
@@ -82,10 +84,16 @@ else
           tx_diff = cur_tx - last_tx_size[port]
           last_tx_size[port] = cur_tx
 
+          rx_loss = $pkt_buf.total_rx_loss[port]
+          if cur_rx > 0
+            rx_loss_rate = rx_loss * PACKET_SIZE * 100.0 / cur_rx
+          else
+            rx_loss_rate = 0.0
+          end
 
-          text = ''
+          text = "#{port}:"
           text += sprintf("[RX]總:%11.3f Mbit，",cur_rx * 8.0 / UNIT_MEGA)
-          text += "區:#{(sprintf("%8.3f",rx_diff * 8.0 / UNIT_MEGA))} Mbit，遺失:#{sprintf('%4d',$pkt_buf.total_rx_loss[port])}p "
+          text += "區:#{(sprintf("%8.3f",rx_diff * 8.0 / UNIT_MEGA))} Mbit，遺失:#{sprintf("%4dp (%6.4f%%)",rx_loss,rx_loss_rate)} "
           text += sprintf("[TX]總:%11.3f Mbit，",cur_tx * 8.0 / UNIT_MEGA)
           text += "區:#{(sprintf("%8.3f",tx_diff * 8.0 / UNIT_MEGA))} Mbit，遺失:#{sprintf('%4d',$pkt_buf.total_tx_loss[port])}p "
           texts << text
@@ -93,7 +101,7 @@ else
       end
       current_q = DCB_SERVER_BUFFER_PKT_SIZE - $pkt_buf.available
       q_rate = (current_q * 100.0)/DCB_SERVER_BUFFER_PKT_SIZE
-      printf("=========Q: %5.2f%% :#{'|'*(0.7*q_rate).ceil}\n",q_rate)
+      printf("=====Q: %5d(%5.2f%%) :#{'|'*(0.7*q_rate).ceil}\n",current_q,q_rate)
       texts.each do |text|
         print text+"\n"
       end

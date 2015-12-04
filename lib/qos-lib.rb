@@ -93,3 +93,9 @@ def get_switch_priority(sw_id)
   end
   return switches.index(sw_id) || 9999
 end
+
+
+def dcb_get_upstream(*args)
+  ["172.16.0.1",DCB_SIGNAL_SENDER_PORT]
+
+end

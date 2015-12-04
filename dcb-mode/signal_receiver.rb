@@ -1,37 +1,35 @@
 require_relative 'config'
 require 'socket'
-require 'thread'
 require 'qos-lib'
 
 class SignalReceiver
-
-  attr_reader :sender_lock
-  attr_accessor :sneders
-  attr_reader :main_sock
-
-  def initialize
-    @main_sock = TCPServer.new("0.0.0.0",DCB_SIGNAL_SENDER_PORT)  
-    @senders = []
-    @sender_lock = Mutex.new
+  def initialize(pkt_buf,addr)
+    @pkt_buf = pkt_buf
+    @peer_ip,@peer_port = addr
   end
-  
-  def accept_client
-    @sender_lock.synchronize do 
-      @senders << @main_sock.accept
+
+  def connect_peer
+    @peer = TCPSocket.new(@peer_ip,@peer_port) 
+    puts "Sender #{@peer_ip}:#{@peer_port} Connected"
+  end
+
+  def run_loop
+    while @peer.gets
+      data = $_.split
+      delay = Time.now.to_f - data[1].to_f
+      printf("%6s, Time delayed: %7.4fms\n",data[0],delay*1000)
+      if data[0] =~ /STOP/i
+        @pkt_buf.send_stop
+      elsif data[0] =~ /GO/
+        @pkt_buf.send_go
+      end
     end
-    puts "New sender connected"
+    # closed
   end
 
-
-end
-
-$signal_recv = SignalReceiver.new
-
-def run_accept_thread
-  thr = Thread.new do 
-    loop do
-      $signal_recv.accept_client
-    end
+  def cleanup
+    @peer.close
   end
+
 end
 
