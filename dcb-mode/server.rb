@@ -11,11 +11,11 @@ require 'signal_sender'
 require 'packet_handler'
 
 
-#SERVER_OPEN_PORT_RANGE = 5002..5008
+SERVER_OPEN_PORT_RANGE = 5002..5008
 #SERVER_OPEN_PORT_RANGE = 5005..5005
 #SERVER_OPEN_PORT_RANGE = 5002..5002
 #SERVER_OPEN_PORT_RANGE = 5008..5008
-SERVER_OPEN_PORT_RANGE = 5005..5008
+#SERVER_OPEN_PORT_RANGE = 5005..5008
 
 if SERVER_RANDOM_FIXED_SEED
   srand(0)
@@ -62,7 +62,15 @@ else
   $pkt_buf.notifier = $signal_sender
   $signal_sender.pkt_buf = $pkt_buf
   thr_accept = run_accept_thread
-  
+
+
+  thr_write = []
+  (SERVER_OPEN_PORT_RANGE).each do |port|
+    thr_write << Thread.new do
+      $pkt_buf.writer_loop(port)
+    end
+  end
+
   #thr_read = []
   #(SERVER_OPEN_PORT_RANGE).each do |port|
   #  thr_read << run_port_read_thread(port)
@@ -82,16 +90,19 @@ else
   end
   last_time = Time.at(0)
   texts = []
+  total_rx_diff = 0
   begin
     loop do
       if Time.now - last_time > 1
+        total_rx_diff = 0
         texts = []
         last_time = Time.now
         (SERVER_OPEN_PORT_RANGE).each do |port|
           cur_rx = $pkt_buf.total_rx[port]
           rx_diff = cur_rx - last_rx_size[port]
+          total_rx_diff += rx_diff
           last_rx_size[port] = cur_rx
-
+  
 
           cur_tx = $pkt_buf.total_tx[port]
           tx_diff = cur_tx - last_tx_size[port]
@@ -114,7 +125,7 @@ else
       end
       current_q = DCB_SERVER_BUFFER_PKT_SIZE - $pkt_buf.available
       q_rate = (current_q * 100.0)/DCB_SERVER_BUFFER_PKT_SIZE
-      printf("=====Q: %5d(%5.2f%%) :#{'|'*(0.7*q_rate).ceil}\n",current_q,q_rate)
+      printf("===Spd: %8.3f Mbit; Q: %5d(%5.2f%%) :#{'|'*(0.4*q_rate).ceil}\n",total_rx_diff * 8.0 / UNIT_MEGA,current_q,q_rate)
       texts.each do |text|
         print text+"\n"
       end

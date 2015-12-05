@@ -64,6 +64,7 @@ class PacketHandler
       @pkt_buf.total_rx_loss[@port] += (CLI_ACK_SLICE_PKT - @recv_count  + CLI_ACK_SLICE_PKT * (task_n - @task_cnt - 1))
       @recv_count = 0
       @task_cnt = task_n
+      $pkt_buf.disk_lock.unlock if $pkt_buf.disk_lock.owned? && $pkt_buf.disk_lock.locked?
     end
     sub_n = pkt[:req][:sub_no][0]
     #print "收到編號：#{sub_n}，"
@@ -75,6 +76,10 @@ class PacketHandler
       #puts "正確編號：#{sub_n}"
       @recv_buff[sub_n] = true
       @recv_count += 1
+
+      if sub_n == 0
+        $pkt_buf.disk_lock.lock
+      end
       # full?
       if @recv_count == CLI_ACK_SLICE_PKT
         # full
@@ -83,9 +88,8 @@ class PacketHandler
         end
         @recv_count = 0
         # IO 
-        $pkt_buf.disk_lock.synchronize do
-          sleep 0.1
-        end
+        sleep 0.02
+        $pkt_buf.disk_lock.unlock if $pkt_buf.disk_lock.owned? && $pkt_buf.disk_lock.locked?
         @task_cnt += 1
       else
         # not full
@@ -98,6 +102,12 @@ class PacketHandler
     req = pkt[:req]
     req[:is_request] = false
     req[:is_reply] = true
+    if $pkt_buf.disk_lock.owned? && $pkt_buf.disk_lock.locked?
+      $pkt_buf.disk_lock.unlock
+    end
+    #$pkt_buf.disk_lock.synchronize do
+      #sleep 1
+    #end
     write_packet_req(req,*(pkt[:peer]))
   end
 
@@ -133,17 +143,23 @@ class ActivePacketHandler < PacketHandler
   def run_loop
     i = 0
     loop do
-      CLI_ACK_SLICE_PKT.times do |j|
-        req = {}
-        req[:is_request] = true
-        req[:type] = "data send"
-        req[:task_no] = i
-        req[:sub_no] = [j]
-        write_packet_req(req)
+      (rand(5)+1).times do
+        while !@pkt_buf.send_ok
+          sleep 0.0001
+        end
+        CLI_ACK_SLICE_PKT.times do |j|
+          req = {}
+          req[:is_request] = true
+          req[:type] = "data send"
+          req[:task_no] = i
+          req[:sub_no] = [j]
+          write_packet_req(req)
+        end
+        send_and_wait_for_ack
+        #sleep 0.02
+        i += 1
       end
-      send_and_wait_for_ack
-      #sleep 0.03
-      i += 1
+      sleep rand(1)+rand
     end
   end
   

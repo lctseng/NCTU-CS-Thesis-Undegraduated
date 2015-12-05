@@ -26,9 +26,15 @@ class PacketBuffer
     @peers_list = []
     @data_locks = {}
     @cond_var = {}
+    @writer_locks = {}
+    @writer_cond = {}
+    @write_queue = {}
     range.each do |port|
       @cond_var[port] = ConditionVariable.new 
       @data_locks[port] = Mutex.new
+      @writer_locks[port] = Mutex.new
+      @writer_cond[port] = ConditionVariable.new
+      @write_queue[port] = []
       @data[port] = []
       sock = UDPSocket.new
       @peers[port] = sock
@@ -86,7 +92,7 @@ class PacketBuffer
                 # store success 
               else 
                 @total_rx_loss[port] += 1
-                puts "Packet Buffer full when adding packet from #{port}!"
+                #puts "Packet Buffer full when adding packet from #{port}!"
               end
             rescue IO::WaitReadable
               break
@@ -134,6 +140,7 @@ class PacketBuffer
       ready = IO.select(@peers_list)
       ready[0].each do |sock|
         port = @sock_data[sock]
+        acks = []
         @data_locks[port].synchronize do
           loop do
             begin
@@ -142,14 +149,20 @@ class PacketBuffer
               pkt = {}
               pkt[:port] = port
               pkt[:size] = size
-              pkt[:req] = parse_command(pack[0])
+              req = parse_command(pack[0])
+              pkt[:req] = req
               pkt[:msg] = pack[0]
               pkt[:peer] = [pack[1][3],pack[1][1]]
-              if store_packet(pkt)
+              # reply ack 
+              if false && req[:is_request] && req[:type] == "data ack"
+                req[:is_request] = false
+                req[:is_reply] = true
+                acks << pkt
+              elsif store_packet(pkt)
                 # store success 
               else 
                 @total_rx_loss[port] += 1
-                puts "Packet Buffer full when adding packet from #{port}!"
+                #puts "Packet Buffer full when adding packet from #{port}!"
               end
             rescue IO::WaitReadable
               break
@@ -157,7 +170,14 @@ class PacketBuffer
           end
         end
         @cond_var[port].signal
+        if !acks.empty?
+          @writer_locks[port].synchronize do
+            @write_queue[port] += acks
+            @writer_cond[port].signal
+          end
+        end
       end
+
 =begin
       #@data_lock.synchronize do
         #CLI_ACK_SLICE_PKT.times do 
@@ -190,6 +210,20 @@ class PacketBuffer
 =end
 
       stop_go_check
+    end
+  end
+
+  def writer_loop(port)
+    loop do
+      @writer_locks[port].synchronize do 
+        if @write_queue[port].empty?
+          @writer_cond[port].wait(@writer_locks[port])
+        end
+        @write_queue[port].each do |pkt|
+          write_packet_req(port,pkt[:req],*pkt[:peer])
+        end
+        @write_queue[port] = []
+      end
     end
   end
 
@@ -279,9 +313,9 @@ class PacketBuffer
   end
 
   def write_packet_req(port,req,*peer)
-    while !@send_ok
-      sleep 0.001
-    end
+    #while !@send_ok
+    #  sleep 0.001
+    #end
     size = @peers[port].send(pack_command(req),0,*peer)
     @total_tx[port] += size
     size
@@ -296,9 +330,9 @@ class PacketBuffer
         tgr_data = @data[port]
       end
       if !tgr_data.empty?
-        remain = CLI_ACK_SLICE
         tgr_size = tgr_data.size
         get_size = [tgr_size,CLI_ACK_SLICE_PKT].min
+        #get_size = [tgr_size,1].min
         block_data += tgr_data[0,get_size]
         @data[port] = tgr_data[get_size,tgr_size]
         @available += get_size
