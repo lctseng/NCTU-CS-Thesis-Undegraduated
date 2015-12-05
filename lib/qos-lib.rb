@@ -94,8 +94,48 @@ def get_switch_priority(sw_id)
   return switches.index(sw_id) || 9999
 end
 
+def dcb_get_sw_port_shift(sw)
+  case sw
+  when "s1"
+    shift = 100
+  when "s2"
+    shift = 200
+  when "s3"
+    shift = 300
+  when "s4"
+    shift = 400
+  else
+    shift = 0
+  end
+  shift
+end
 
-def dcb_get_upstream(*args)
-  ["172.16.0.1",DCB_SIGNAL_SENDER_PORT]
+def dcb_get_upstream(type,id)
+  case type
+  when :client
+    case id
+    when 5005
+      ["172.16.0.253",DCB_SIGNAL_SENDER_PORT+100]
+    when 5002,5006
+      ["172.16.0.253",DCB_SIGNAL_SENDER_PORT+200]
+    when 5003,5007
+      ["172.16.0.253",DCB_SIGNAL_SENDER_PORT+300]
+    when 5004,5008
+      ["172.16.0.253",DCB_SIGNAL_SENDER_PORT+400]
+    end
+  when :switch
+    case id
+    when "s1"
+      ["172.16.0.1",DCB_SIGNAL_SENDER_PORT]
+    when "s2"
+      ["172.16.0.253",DCB_SIGNAL_SENDER_PORT+100]
+    when "s3"
+      ["172.16.0.253",DCB_SIGNAL_SENDER_PORT+200]
+    when "s4"
+      ["172.16.0.253",DCB_SIGNAL_SENDER_PORT+300]
+    end
+  end
 
 end
+
+

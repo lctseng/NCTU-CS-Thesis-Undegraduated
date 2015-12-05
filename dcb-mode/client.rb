@@ -20,7 +20,8 @@ $host = ARGV[0]
 $port = ARGV[1].to_i
 
 $pkt_buf = PacketBuffer.new($host,[$port],true)
-$signal_recv = SignalReceiver.new($pkt_buf,dcb_get_upstream(:client,$port))
+$signal_recv = SignalReceiver.new(dcb_get_upstream(:client,$port))
+$signal_recv.notifier = $pkt_buf
 
 $signal_recv.connect_peer
 

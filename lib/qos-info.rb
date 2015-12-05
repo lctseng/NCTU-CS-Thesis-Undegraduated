@@ -66,9 +66,9 @@ SWITCH_LOG_NAME_JSON_FORMAT = "json/switch_%s_%s.json"
 
 
 # DCB Mode
-DCB_SERVER_BUFFER_PKT_SIZE = 2000 # server application memory buffer for 100000 pkts 
-DCB_SERVER_BUFFER_STOP_THRESHOLD = DCB_SERVER_BUFFER_PKT_SIZE * 0.1
-DCB_SERVER_BUFFER_GO_THRESHOLD = DCB_SERVER_BUFFER_PKT_SIZE * 0.001
+DCB_SERVER_BUFFER_PKT_SIZE = 10000 # server application memory buffer for 100000 pkts 
+DCB_SERVER_BUFFER_STOP_THRESHOLD = DCB_SERVER_BUFFER_PKT_SIZE * 0.03
+DCB_SERVER_BUFFER_GO_THRESHOLD = DCB_SERVER_BUFFER_PKT_SIZE * 0.01
 DCB_SIGNAL_SENDER_PORT = 9001
 
 
@@ -245,7 +245,7 @@ when /linearTopoK4N2-single/i
 
 
   # Delays
-  default_delay = '0.1ms'
+  default_delay = '0ms'
   LINK_DELAY.merge!({
     "s1-eth1" => default_delay,
     "s1-eth2" => default_delay,

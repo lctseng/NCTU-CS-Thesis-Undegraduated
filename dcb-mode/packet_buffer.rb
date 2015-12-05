@@ -63,11 +63,19 @@ class PacketBuffer
 =end
   end
 
-  def send_stop
+  def name
+    "Host"
+  end
+
+  def show_cmd
+    true
+  end
+
+  def send_stop(*args)
     @send_ok = false
   end
 
-  def send_go
+  def send_go(*args)
     @send_ok = true
   end
 

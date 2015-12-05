@@ -143,7 +143,7 @@ class ActivePacketHandler < PacketHandler
   def run_loop
     i = 0
     loop do
-      (rand(5)+1).times do
+      #(rand(5)+1).times do
         while !@pkt_buf.send_ok
           sleep 0.0001
         end
@@ -158,8 +158,8 @@ class ActivePacketHandler < PacketHandler
         send_and_wait_for_ack
         #sleep 0.02
         i += 1
-      end
-      sleep rand(1)+rand
+      #end
+      #sleep rand(1)+rand
     end
   end
   

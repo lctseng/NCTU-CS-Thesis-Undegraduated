@@ -3,7 +3,11 @@
 require_relative 'config'
 
 require 'socket'
+NO_TYPE_REQUIRED = true
 require 'qos-info'
+require 'signal_sender'
+require 'signal_receiver'
+
 
 $DEBUG = true
 
@@ -48,16 +52,69 @@ def set_max_speed(speed)
   IO.popen "tc class change dev #{$port} classid 1:#{$qid} htb rate 12Kbit ceil #{speed}Mbit"
 end
 
+
+
+
+$signal_sender.bind_port(dcb_get_sw_port_shift($sw))
+thr_signal_accept = run_accept_thread
+
+$signal_receiver = SignalReceiver.new(dcb_get_upstream(:switch,$sw))
+$signal_receiver.connect_peer
+
+
+class SignalPasser
+
+  attr_reader :previous_state
+  attr_reader :recv
+  attr_reader :send
+
+  def initialize(recv,send)
+    @recv = recv
+    @send = send
+    @recv.notifier = self
+    @send.originator = self
+  end
+
+  def send_go(time)
+    #puts "#{$sw}: GO!"
+    @previous_state = :go
+    #sleep 0.001
+    @send.notify_go(time)
+    set_max_speed(800)
+  end
+
+  def send_stop(time)
+    #puts "#{$sw}: STOP!"
+    @previous_state = :stop
+    #sleep 0.001
+    @send.notify_stop(time)
+    if $q_data[:len] > 200
+      set_max_speed(100)
+    else
+      set_max_speed(5)
+    end
+  end
+
+  def name
+    "#{$sw}"
+  end
+
+  def show_cmd
+    false
+  end
+end
+
+$signal_passer = SignalPasser.new($signal_receiver,$signal_sender)
+
+thr_signal_read = Thread.new do
+  $signal_receiver.run_loop
+end
+
 # 不斷取得queue len
 begin
   last_time = Time.now
   loop do
     # Timing compute
-    this_time = Time.now
-    if this_time - last_time < MONITOR_INTERVAL
-      sleep MONITOR_DETECT_INTERVAL
-      next
-    end
     last_time = Time.now
     $q_data = data =  get_queue_len($qid)
     len = data[:len]
@@ -69,6 +126,10 @@ begin
       bar_len = (len / 20.0).ceil
       printf("%5d,速度上限：%3d Mbits ,Queue:%s\n",len,data[:spd],"|"*bar_len) if MONITOR_SHOW_INFO
     end
+    if data[:spd] <= 25 && len >= 200
+      set_max_speed(100)
+    end
+    sleep MONITOR_INTERVAL
 
   end
 rescue SystemExit, Interrupt

@@ -60,7 +60,7 @@ else
   $signal_sender.bind_port
   $pkt_buf = PacketBuffer.new("0.0.0.0",SERVER_OPEN_PORT_RANGE)
   $pkt_buf.notifier = $signal_sender
-  $signal_sender.pkt_buf = $pkt_buf
+  $signal_sender.originator = $pkt_buf
   thr_accept = run_accept_thread
 
 

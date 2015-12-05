@@ -8,15 +8,15 @@ class SignalSender
   attr_reader :peer_lock
   attr_accessor :peers
   attr_reader :main_sock
-  attr_accessor :pkt_buf
+  attr_accessor :originator
 
   def initialize
     @peers = []
     @peer_lock = Mutex.new
   end
 
-  def bind_port
-    @main_sock = TCPServer.new("0.0.0.0",DCB_SIGNAL_SENDER_PORT)  
+  def bind_port(shift = 0)
+    @main_sock = TCPServer.new("0.0.0.0",DCB_SIGNAL_SENDER_PORT + shift)  
   end
   
   def accept_client
@@ -25,12 +25,12 @@ class SignalSender
       if sock == @main_sock
         new_sock = @main_sock.accept
         #puts "New receiver connected"
-        if @pkt_buf
-          case @pkt_buf.previous_state
+        if @originator
+          case @originator.previous_state
           when :go
-            new_sock.puts "GO #{Time.now}"
+            new_sock.puts "GO #{Time.now.to_f} #{@originator.name}"
           when :stop
-            new_sock.puts "STOP #{Time.now}"
+            new_sock.puts "STOP #{Time.now.to_f} #{@originator.name}"
           end
         end
         @peer_lock.synchronize do 
@@ -49,25 +49,25 @@ class SignalSender
   end
 
 
-  def notify_go
+  def notify_go(time = Time.now.to_f)
     @peer_lock.synchronize do 
       @peers.each do |peer|
         if peer.closed?
           @peers.delete(peer)
         else
-          peer.puts "GO #{Time.now.to_f}"
+          peer.puts "GO #{time} #{@originator.name}"
         end
       end
     end
   end
 
-  def notify_stop
+  def notify_stop(time = Time.now.to_f)
     @peer_lock.synchronize do 
       @peers.each do |peer|
         if peer.closed?
           @peers.delete(peer)
         else
-          peer.puts "STOP #{Time.now.to_f}"
+          peer.puts "STOP #{time} #{@originator.name}"
         end
       end
     end
