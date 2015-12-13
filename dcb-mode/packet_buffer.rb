@@ -163,7 +163,7 @@ class PacketBuffer
               pkt[:msg] = pack[0]
               pkt[:peer] = [pack[1][3],pack[1][1]]
               # reply ack 
-              if req[:is_request] && req[:type] == "data ack"
+              if DCB_PREMATURE_ACK && req[:is_request] && req[:type] == "data ack"
                 req[:is_request] = false
                 req[:is_reply] = true
                 acks << pkt
@@ -340,6 +340,14 @@ class PacketBuffer
     @total_tx[port] += size
     size
   end
+
+
+  def write_packet_raw(port,str,*peer)
+    size = @peers[port].send(str,0,*peer)
+    @total_tx[port] += size
+    size
+  end
+
 
   def extract_block(port,timeout = nil)
     block_data = []

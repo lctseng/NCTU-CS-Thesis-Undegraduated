@@ -89,9 +89,11 @@ class PacketHandler
         end
         @recv_count = 0
         # IO 
-        sleep 0.021
+        sleep get_disk_io_time
         @lock_file.flock(File::LOCK_UN)
-        @task_cnt += 1
+        if DCB_CEHCK_MAJOR_NUMBER
+          @task_cnt += 1
+        end
       else
         # not full
       end
@@ -123,6 +125,9 @@ class PacketHandler
   def write_packet_req(req,*peer)
     @pkt_buf.write_packet_req(@port,req,*peer)
   end
+  def write_packet_raw(str,*peer)
+    @pkt_buf.write_packet_raw(@port,str,*peer)
+  end
 
 end
 
@@ -141,11 +146,23 @@ class ActivePacketHandler < PacketHandler
   # DEBUG
   def run_loop
     i = 0
+    str = "1"*PACKET_SIZE
+    pkts = []
+    CLI_ACK_SLICE_PKT.times do |j|
+      req = {}
+      req[:is_request] = true
+      req[:type] = "data send"
+      req[:task_no] = i
+      req[:sub_no] = [j]
+      pkts[j] = pack_command(req)
+    end
+
     loop do
-      (rand(5)+1).times do
-        while !@pkt_buf.send_ok
-          sleep 0.0001
-        end
+      while !@pkt_buf.send_ok
+        sleep 0.0001
+      end
+      #last = Time.now
+      if DCB_CEHCK_MAJOR_NUMBER
         CLI_ACK_SLICE_PKT.times do |j|
           req = {}
           req[:is_request] = true
@@ -154,12 +171,19 @@ class ActivePacketHandler < PacketHandler
           req[:sub_no] = [j]
           write_packet_req(req)
         end
-        send_and_wait_for_ack
-        #sleep 0.02
-        i += 1
+      else
+        CLI_ACK_SLICE_PKT.times do |j|
+          write_packet_raw(pkts[j])
+        end
       end
-      #sleep rand(1)+rand
+      #now = Time.now
+      #puts "收到：#{(now - last)*1000}ms"
+      send_and_wait_for_ack
+      #last = now
+      #sleep 0.02
+      i += 1
     end
+    #sleep rand(1)+rand
   end
   
   def write_ack_req
@@ -174,7 +198,7 @@ class ActivePacketHandler < PacketHandler
     write_ack_req
     loop do
       # get next
-      pkt = extract_next_packet(1)
+      pkt = extract_next_packet(10)
       if pkt && pkt[:req][:type] == "data ack"
         #puts "收到ACK reply"
         break

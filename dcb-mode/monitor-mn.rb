@@ -79,7 +79,7 @@ class SignalPasser
     #puts "#{$sw}: GO!"
     #sleep 0.001
     @send.notify_go(time)
-    set_max_speed(800)
+    #set_max_speed(800)
     @previous_state = :go
   end
 
@@ -87,13 +87,13 @@ class SignalPasser
     #puts "#{$sw}: STOP!"
     #sleep 0.001
     @send.notify_stop(time)
-    if @previous_state != :stop
-      if $q_data[:len] > 200
-        set_max_speed(800)
-      else
-        set_max_speed(800)
-      end
-    end
+    #if @previous_state != :stop
+    #  if $q_data[:len] > 200
+    #    set_max_speed(800)
+    #  else
+    #    set_max_speed(800)
+    #  end
+    #end
     @previous_state = :stop
   end
 
