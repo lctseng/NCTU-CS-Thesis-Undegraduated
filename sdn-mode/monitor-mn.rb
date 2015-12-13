@@ -1,6 +1,7 @@
 #!/usr/bin/env ruby 
 
 require_relative 'config'
+NO_TYPE_REQUIRED = true
 
 require 'socket'
 require 'qos-info'

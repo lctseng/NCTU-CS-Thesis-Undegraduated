@@ -1,6 +1,7 @@
 #!/usr/bin/env ruby 
 
 require_relative 'config'
+NO_TYPE_REQUIRED = true
 require 'socket'
 require 'thread'
 require 'fileutils'
@@ -287,7 +288,7 @@ def run_monitor_thread
           data = line.split
           eval "$speed = ($speed * #{data[1]}).round"
         when /assign/
-          spd = line.split[1].to_i
+          spd = line.split[1].to_i*50
           puts "速度被指派為#{spd*8.0 / UNIT_MEGA} Mbits" if !$start_read
           $assign_report = true
           $speed = spd * CLI_SEND_INTERVAL
@@ -347,8 +348,6 @@ def run_pattern_thread
           end
         end
       end
-      # read 100MB
-      read_data_from_server((rand(5)+1)*UNIT_MEGA)
       if new_added > 0
         # 新增傳輸需求給sender
         printf("新增傳輸需求：%.6f MB(%d bytes)\n",new_added.to_f/UNIT_MEGA,new_added)
@@ -603,13 +602,16 @@ begin
   wait_for_confirm_task
   last_time = Time.now
   loop do
-    # Timing compute
+    # Timing compute 
     this_time = Time.now
     if this_time - last_time < CLI_SEND_INTERVAL
-      sleep CLI_SEND_DETECT_INTERVAL
-      next
+      #sleep CLI_SEND_DETECT_INTERVAL
+      #next
     end
     last_time = Time.now
+    #sleep CLI_SEND_INTERVAL
+    
+    
     $delay_send += $speed
     if $delay_send >= PACKET_SIZE
       pkts = $delay_send.to_i / PACKET_SIZE
@@ -632,12 +634,14 @@ begin
             end
           end
         end
-        $ack_send += send
+        $ack_send += 1
         # 等待ACK
-        if $ack_send >= CLI_ACK_SLICE
+        if $ack_send >= CLI_ACK_SLICE_PKT
           #puts "等待ACK中..."
           $ack_send = 0
           wait_for_ack
+          #spin_time 0.021
+          #sleep 0.021
         end
       end # end for
     end

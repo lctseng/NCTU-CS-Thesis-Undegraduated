@@ -1,5 +1,6 @@
 #!/usr/bin/env ruby 
 require_relative 'config'
+NO_TYPE_REQUIRED = true
 require 'qos-info'
 
 out_name = ARGV[0]
@@ -199,7 +200,7 @@ def generate_by_patching_files(f,pattern_time)
 end
 
 def generate_long_flow(f,pattern_time)
-  f.puts 1000*UNIT_MEGA
+  f.puts "write #{1000*UNIT_MEGA}"
 end
 
 def generate_pattern(out_name,pattern_time)
@@ -207,9 +208,9 @@ def generate_pattern(out_name,pattern_time)
     #generate_default_pattern(f,pattern_time)
     #generate_elephant_pattern(f,pattern_time)
     #generate_elephant_long_sleep_pattern(f,pattern_time,{long_time: 10,long_rate: 0.01,large_rate: 0.5,small_rate: 0.9}) 
-    generate_bursty_pattern(f,pattern_time)
+    #generate_bursty_pattern(f,pattern_time)
     #generate_by_patching_files(f,pattern_time)
-    #generate_long_flow(f,pattern_time)
+    generate_long_flow(f,pattern_time)
   end
 end
 

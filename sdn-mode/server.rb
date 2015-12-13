@@ -1,6 +1,7 @@
 #!/usr/bin/env ruby 
 
 require_relative 'config'
+NO_TYPE_REQUIRED = true
 
 require 'socket'
 require 'qos-lib'
@@ -11,6 +12,7 @@ $DEBUG = true
 port = ARGV[0].to_i
 use_sock = ARGV[1] =~ /-s/
 
+$lock_file = File.open("lock_file")
 
 # Output socket
 if use_sock
@@ -68,7 +70,11 @@ def send_ack_confirm(receiver,req)
   req[:is_reply] = true
 
   # TODO: timing
-  spin_time (rand(3)+1)*0.0001
+
+  $lock_file.flock(File::LOCK_EX)
+  spin_time 0.021
+  $lock_file.flock(File::LOCK_UN)
+
   if DATA_PROTOCOL == :udp
     #$output.puts "傳送ACK給#{$addr}"
     receiver.send(pack_command(req),0,$addr[3],$addr[1])
