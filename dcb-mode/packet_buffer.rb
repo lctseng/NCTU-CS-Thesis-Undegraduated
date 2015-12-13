@@ -14,6 +14,7 @@ class PacketBuffer
   attr_reader :previous_state
 
   def initialize(address,range,active = false)
+    @last_check = Time.at(0)
     @address =address
     @range = range
     @peers = {}
@@ -162,7 +163,7 @@ class PacketBuffer
               pkt[:msg] = pack[0]
               pkt[:peer] = [pack[1][3],pack[1][1]]
               # reply ack 
-              if false && req[:is_request] && req[:type] == "data ack"
+              if req[:is_request] && req[:type] == "data ack"
                 req[:is_request] = false
                 req[:is_reply] = true
                 acks << pkt
@@ -237,17 +238,28 @@ class PacketBuffer
 
   def stop_go_check
     if DCB_SERVER_BUFFER_PKT_SIZE -  @available > DCB_SERVER_BUFFER_STOP_THRESHOLD
-      if @previous_state == :go
+      now = Time.now
+      if @previous_state == :go || now - @last_check > 1
+        @last_check = now
         @previous_state = :stop
         notify_stop
       end
     elsif DCB_SERVER_BUFFER_PKT_SIZE -  @available < DCB_SERVER_BUFFER_GO_THRESHOLD
-      if @previous_state == :stop
+      now = Time.now
+      if @previous_state == :stop || now - @last_check > 1
+        @last_check = now
         @previous_state = :go
         notify_go
       end
     end
 
+  end
+
+  def stop_go_check_loop
+    loop do
+      sleep 1
+      stop_go_check
+    end
   end
 
   def notify_stop

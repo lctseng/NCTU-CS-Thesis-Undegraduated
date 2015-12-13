@@ -12,7 +12,7 @@ require 'signal_receiver'
 $DEBUG = true
 
 # 傳送資料間隔
-MONITOR_INTERVAL = 0.05
+MONITOR_INTERVAL = 0.01
 MONITOR_DETECT_INTERVAL = MONITOR_INTERVAL / 10.0
 $max_spd = MAX_SPEED / UNIT_MEGA
 
@@ -77,21 +77,44 @@ class SignalPasser
 
   def send_go(time)
     #puts "#{$sw}: GO!"
-    @previous_state = :go
     #sleep 0.001
     @send.notify_go(time)
     set_max_speed(800)
+    @previous_state = :go
   end
 
   def send_stop(time)
     #puts "#{$sw}: STOP!"
-    @previous_state = :stop
     #sleep 0.001
     @send.notify_stop(time)
-    if $q_data[:len] > 200
-      set_max_speed(100)
-    else
-      set_max_speed(5)
+    if @previous_state != :stop
+      if $q_data[:len] > 200
+        set_max_speed(800)
+      else
+        set_max_speed(800)
+      end
+    end
+    @previous_state = :stop
+  end
+
+  def temp_stop
+    if @previous_state == :go && !@temp_stopped
+      @temp_stopped = true
+      @previous_state = :stop
+      @send.notify_stop
+      set_max_speed(20)
+      puts "Temp STOP!"
+    end
+  end
+
+  def resume_go
+    if @temp_stopped
+      @temp_stopped = false
+      #if @previous_state == :go
+        @send.notify_go
+        set_max_speed(800)
+      #end
+      puts "Temp Resume!"
     end
   end
 
@@ -121,13 +144,19 @@ begin
     if len >= 500
       puts "在#{Time.now.to_f}發起！" if DEBUG_TIMING
     end
+
+    if len > 200
+      #$signal_passer.temp_stop
+    else
+      #$signal_passer.resume_go
+    end
     if len >= 0 
       # 畫圖
       bar_len = (len / 20.0).ceil
       printf("%5d,速度上限：%3d Mbits ,Queue:%s\n",len,data[:spd],"|"*bar_len) if MONITOR_SHOW_INFO
     end
     if data[:spd] <= 25 && len >= 200
-      set_max_speed(100)
+      #set_max_speed(100)
     end
     sleep MONITOR_INTERVAL
 

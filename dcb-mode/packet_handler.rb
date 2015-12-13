@@ -7,6 +7,7 @@ class PacketHandler
     @recv_buff = [false]*CLI_ACK_SLICE_PKT
     @recv_count = 0
     @task_cnt = 0
+    @lock_file = File.open("test")
   end
 
   def run_loop
@@ -64,7 +65,7 @@ class PacketHandler
       @pkt_buf.total_rx_loss[@port] += (CLI_ACK_SLICE_PKT - @recv_count  + CLI_ACK_SLICE_PKT * (task_n - @task_cnt - 1))
       @recv_count = 0
       @task_cnt = task_n
-      $pkt_buf.disk_lock.unlock if $pkt_buf.disk_lock.owned? && $pkt_buf.disk_lock.locked?
+      @lock_file.flock(File::LOCK_UN)
     end
     sub_n = pkt[:req][:sub_no][0]
     #print "收到編號：#{sub_n}，"
@@ -78,7 +79,7 @@ class PacketHandler
       @recv_count += 1
 
       if sub_n == 0
-        $pkt_buf.disk_lock.lock
+        @lock_file.flock(File::LOCK_EX)
       end
       # full?
       if @recv_count == CLI_ACK_SLICE_PKT
@@ -88,8 +89,8 @@ class PacketHandler
         end
         @recv_count = 0
         # IO 
-        sleep 0.02
-        $pkt_buf.disk_lock.unlock if $pkt_buf.disk_lock.owned? && $pkt_buf.disk_lock.locked?
+        sleep 0.021
+        @lock_file.flock(File::LOCK_UN)
         @task_cnt += 1
       else
         # not full
@@ -102,9 +103,7 @@ class PacketHandler
     req = pkt[:req]
     req[:is_request] = false
     req[:is_reply] = true
-    if $pkt_buf.disk_lock.owned? && $pkt_buf.disk_lock.locked?
-      $pkt_buf.disk_lock.unlock
-    end
+    @lock_file.flock(File::LOCK_UN)
     #$pkt_buf.disk_lock.synchronize do
       #sleep 1
     #end
@@ -143,7 +142,7 @@ class ActivePacketHandler < PacketHandler
   def run_loop
     i = 0
     loop do
-      #(rand(5)+1).times do
+      (rand(5)+1).times do
         while !@pkt_buf.send_ok
           sleep 0.0001
         end
@@ -158,7 +157,7 @@ class ActivePacketHandler < PacketHandler
         send_and_wait_for_ack
         #sleep 0.02
         i += 1
-      #end
+      end
       #sleep rand(1)+rand
     end
   end

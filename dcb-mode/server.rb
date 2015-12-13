@@ -63,6 +63,9 @@ else
   $signal_sender.originator = $pkt_buf
   thr_accept = run_accept_thread
 
+  thr_stop_go_loop = Thread.new do
+    $pkt_buf.stop_go_check_loop
+  end
 
   thr_write = []
   (SERVER_OPEN_PORT_RANGE).each do |port|
