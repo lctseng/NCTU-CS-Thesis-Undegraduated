@@ -139,3 +139,8 @@ def dcb_get_upstream(type,id)
 end
 
 
+def get_disk_io_time
+  return 0.001
+end
+
+
