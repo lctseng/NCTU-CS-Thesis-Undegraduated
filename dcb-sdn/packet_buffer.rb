@@ -177,6 +177,7 @@ class PacketBuffer
                 req[:is_request] = false
                 req[:is_reply] = true
                 acks << pkt
+                @total_rx[port] += PACKET_SIZE
               elsif store_packet(pkt)
                 # store success 
               else 
