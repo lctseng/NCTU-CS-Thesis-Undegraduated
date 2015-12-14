@@ -167,6 +167,7 @@ class PacketBuffer
                 req[:is_request] = false
                 req[:is_reply] = true
                 acks << pkt
+                @total_rx[port] += PACKET_SIZE 
               elsif store_packet(pkt)
                 # store success 
               else 
@@ -350,6 +351,11 @@ class PacketBuffer
 
 
   def extract_block(port,timeout = nil)
+    #if @last
+    #  now = Time.now
+    #  puts "Time: #{(now - @last)*1000}ms"
+    #end
+    #@last = Time.now
     block_data = []
     @data_locks[port].synchronize do
       tgr_data = @data[port]
