@@ -49,7 +49,7 @@ class SignalReceiver
 
   def get_token(min,max)
     #puts "Getting token: {#{min},#{max}}"
-    @peer.puts "GET_TOKEN #{min} #{max}"
+    @peer.puts "GET_TOKEN #{min} #{max} #{Time.now.to_f}"
     @token_ret = 0
     @token_lock.synchronize do
       while @token_get < min

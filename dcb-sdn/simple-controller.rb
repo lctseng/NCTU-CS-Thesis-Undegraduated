@@ -49,15 +49,15 @@ class SignalPasser
     @token_lock.synchronize do
       @token += token
       #puts "Token: #{@token} (+#{token})"
-      @token = @send.dispatch_token(@token)
+      @token = @send.dispatch_token(@token,time)
     end
   end
   
-  def new_token_request(min)
+  def new_token_request(min,time)
     #puts "New request for token: #{min}"
     @token_lock.synchronize do
       if @token >= min
-        @token = @send.dispatch_token(@token)
+        @token = @send.dispatch_token(@token,time)
       end
     end
   end

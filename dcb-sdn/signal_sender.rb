@@ -53,15 +53,16 @@ class SignalSender
           @peers.delete(sock)
         else
           #puts "Receiver message:#{str}"
-          if str =~ /GET_TOKEN (\d+) (\d+)/i
+          if str =~ /GET_TOKEN (\d+) (\d+) (.+)/i
             min = $1.to_i
             max = $2.to_i
+            time = $3.to_f
             data = @peer_data[sock]
             @peer_data_lock.synchronize do
               data[:min] = min
               data[:max] = max
             end
-            @originator.new_token_request(min)
+            @originator.new_token_request(min,time)
           else
 
           end
@@ -111,7 +112,7 @@ class SignalSender
     @result
   end
 
-  def dispatch_token(free)
+  def dispatch_token(free,time)
     return 0 if free == 0
     return free if free < 1000 
     total_need = 0.0
@@ -130,7 +131,7 @@ class SignalSender
             data[:min] = [data[:min] - send,0].max
             data[:max] -= send
           end
-          peer.puts "GIVE_TOKEN #{Time.now.to_f} #{@originator.name} #{send}"
+          peer.puts "GIVE_TOKEN #{time} #{@originator.name} #{send}"
           free -= send
           #puts "Giving Token: #{send}, remain = #{free}"
           break if free == 0
