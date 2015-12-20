@@ -33,6 +33,7 @@ $q_data = nil
 def get_queue_len(qid)
   len = -1
   spd = 0
+  sent = 0
   IO.popen("tc -s class show dev #{$port} classid 1:#{qid}") {|result|
     str = result.read
     if str =~ /backlog \d+b (\d+)p/i
@@ -43,8 +44,11 @@ def get_queue_len(qid)
     else
       puts "找不到Queue資訊"
     end
+    if str =~ /Sent \d+ bytes (\d+) pkt/i
+      sent = $1.to_i
+    end
   }
-  {len: len,spd: spd}
+  {len: len,spd: spd,sent: sent}
 end
 # 更改queue最大速度
 def set_max_speed(speed)
@@ -133,6 +137,7 @@ thr_signal_read = Thread.new do
   $signal_receiver.run_loop
 end
 
+last_sent = 0
 # 不斷取得queue len
 begin
   last_time = Time.now
@@ -141,6 +146,8 @@ begin
     last_time = Time.now
     $q_data = data =  get_queue_len($qid)
     len = data[:len]
+    sent_diff = data[:sent] - last_sent
+    last_sent = data[:sent]
     if len >= 500
       puts "在#{Time.now.to_f}發起！" if DEBUG_TIMING
     end
@@ -153,7 +160,7 @@ begin
     if len >= 0 
       # 畫圖
       bar_len = (len / 20.0).ceil
-      printf("%5d,速度上限：%3d Mbits ,Queue:%s\n",len,data[:spd],"|"*bar_len) if MONITOR_SHOW_INFO
+      printf("%5d,速度上限：%3d Mbits, 區間已送出: %4d,Queue:%s\n",len,data[:spd],sent_diff,"|"*bar_len) if MONITOR_SHOW_INFO
     end
     if data[:spd] <= 25 && len >= 200
       #set_max_speed(100)
