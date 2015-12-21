@@ -57,7 +57,7 @@ if pid = fork
 else
   pipe_r.close
   $stdout.reopen pipe_w
-  $signal_sender.bind_port(DCB_SDN_CTRL_PORT)
+  $signal_sender.bind_port(DCB_SIGNAL_SENDER_PORT)
   $pkt_buf = PacketBuffer.new("0.0.0.0",SERVER_OPEN_PORT_RANGE)
   $pkt_buf.notifier = $signal_sender
   $signal_sender.originator = $pkt_buf

@@ -174,7 +174,7 @@ class ActivePacketHandler < PacketHandler
       #sleep 0.5
       while @token < CLI_ACK_SLICE_PKT + DCB_SDN_EXTRA_TOKEN_USED
         min = CLI_ACK_SLICE_PKT + DCB_SDN_EXTRA_TOKEN_USED - @token
-        max = min * (can_get ? 3 : 1)
+        max = min * (can_get ? 1 : 1)
         @token += @token_getter.get_token(min,max)
       end
       @token -= CLI_ACK_SLICE_PKT + DCB_SDN_EXTRA_TOKEN_USED
@@ -193,14 +193,14 @@ class ActivePacketHandler < PacketHandler
         end
       end
       
-      send_and_wait_for_ack
+      #send_and_wait_for_ack
       #sleep 0.02
       i += 1
-      if i % 20000 == 0
+      if i % 100 == 0
         puts "remain token: #{@token}"
         sleep rand(3)
       end
-      if i >= 30000
+      if i >= 1000
         puts "remain token: #{@token}"
         can_get = false
         sleep if @token <= 0

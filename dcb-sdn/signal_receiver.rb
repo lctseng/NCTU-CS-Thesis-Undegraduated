@@ -5,6 +5,7 @@ require 'qos-lib'
 class SignalReceiver
 
   attr_accessor :notifier
+  attr_accessor :send_token_method
 
   def initialize(addr)
     @peer_ip,@peer_port = addr
@@ -31,7 +32,10 @@ class SignalReceiver
         elsif data[0] =~ /GO/i
           @notifier.send_go(data[1].to_f)
         elsif data[0] =~ /ADD_TOKEN/i
-          @notifier.send_token(token,data[1].to_f)
+          if @send_token_method && token > 0
+            @send_token_method.call(token,data[1].to_f)
+          end
+          #@notifier.send_token(token,data[1].to_f)
         elsif data[0] =~ /GIVE_TOKEN/i
           @token_lock.synchronize do
             @token_get += token
@@ -59,6 +63,15 @@ class SignalReceiver
       @token_get -= @token_ret
     end
     @token_ret
+  end
+  
+  def notify_token(token,time = Time.now.to_f)
+    if !peer.closed?
+      @peer.puts "ADD_TOKEN #{time} RECV #{token}"
+      return true
+    else
+      return false
+    end
   end
 
 end

@@ -113,14 +113,16 @@ class SignalSender
   end
 
   def dispatch_token(free,time)
+    #puts "Dispatching Token, free = #{free}"
     return 0 if free == 0
-    return free if free < 1000 
+    return free if free < 100
     total_need = 0.0
     @peer_data_lock.synchronize do
       @peer_data.each_value do |data|
         total_need += data[:min]
       end
     end
+    #puts "==>Total need = #{total_need}"
     return free if total_need == 0
     @peer_data.each do |peer,data|
       if !peer.closed?
