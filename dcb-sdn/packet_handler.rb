@@ -167,13 +167,13 @@ class ActivePacketHandler < PacketHandler
 
   attr_accessor :token_getter
 
-  def initialize(pkt_buf,port)
+  def initialize(pkt_buf,port,total_send)
     super(pkt_buf,port)
     @token = 0
     @stop = false
+    @total_send = total_send
   end
 
-  # DEBUG
   def run_loop
     i = 0
     can_get = true
@@ -188,6 +188,7 @@ class ActivePacketHandler < PacketHandler
       pkts[j] = pack_command(req)
     end
     loop do
+
       #sleep 0.5
       #(rand(100)+1).times do
       while @token < CLI_ACK_SLICE_PKT + DCB_SDN_EXTRA_TOKEN_USED
@@ -196,6 +197,7 @@ class ActivePacketHandler < PacketHandler
         @token += @token_getter.get_token(min,max)
       end
       @token -= CLI_ACK_SLICE_PKT + DCB_SDN_EXTRA_TOKEN_USED
+      written = 0
       if DCB_CEHCK_MAJOR_NUMBER
         CLI_ACK_SLICE_PKT.times do |j|
           req = {}
@@ -203,28 +205,24 @@ class ActivePacketHandler < PacketHandler
           req[:type] = "data send"
           req[:task_no] = i
           req[:sub_no] = [j]
-          write_packet_req(req)
+          written += write_packet_req(req)
         end
       else
         CLI_ACK_SLICE_PKT.times do |j|
-          write_packet_raw(pkts[j])
+          written += write_packet_raw(pkts[j])
         end
       end
       
       send_and_wait_for_ack if DCB_SENDER_REQUIRE_ACK
       i += 1
+      @total_send -= written
+      if @total_send <= 0
+        cleanup
+        Process.kill("INT",Process.pid)
+      end
       if @stop
         end_connection
         break
-      end
-      if i % 100 == 0
-        puts "remain token: #{@token}"
-        sleep rand(3)
-      end
-      if i >= 500
-        puts "remain token: #{@token}"
-        can_get = false
-        sleep if @token <= 0
       end
       #end # end times
       #sleep rand(1) + rand*3
@@ -233,6 +231,8 @@ class ActivePacketHandler < PacketHandler
   end
 
   def end_connection
+    return if @ended
+    @ended = true
     @token_getter.get_token(1,1) 
     req = {}
     req[:is_request] = true
