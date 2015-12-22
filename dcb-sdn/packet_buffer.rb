@@ -61,6 +61,15 @@ class PacketBuffer
     #@data_lock = Mutex.new
     @disk_lock = Mutex.new
     @send_ok = false
+    @stop_receive = false
+  end
+
+  def end_connection(port)
+
+  end
+  
+  def end_receive
+    @stop_receive = true
   end
 
   def name

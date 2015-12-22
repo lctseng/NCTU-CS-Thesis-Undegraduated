@@ -31,7 +31,10 @@ thr_read = Thread.new do
 end
 
 thr_recv = Thread.new do
-  $signal_recv.run_loop
+  begin
+    $signal_recv.run_loop
+  rescue IOError
+  end
 end
 
 $peer = ActivePacketHandler.new($pkt_buf,$port)
@@ -45,8 +48,15 @@ end
 begin
   sleep
 rescue SystemExit, Interrupt
+  puts "\n關閉連線中..."
   $peer.cleanup
+  puts "關閉Packet Handler..."
   thr_port.join
   $signal_recv.cleanup
+  puts "關閉Signal Receiver..."
+  thr_recv.join
+  $pkt_buf.end_receive
+  puts "關閉Packet Buffer..."
+  thr_read.exit
   puts "client結束"
 end

@@ -20,7 +20,7 @@ class SignalReceiver
   end
 
   def run_loop
-    while @peer.gets
+    while !@peer.closed? && @peer.gets
       data = $_.split
       delay = Time.now.to_f - data[1].to_f
       from = data[2]

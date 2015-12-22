@@ -23,6 +23,15 @@ class SignalSender
     @main_sock = TCPServer.new("0.0.0.0",port)  
   end
   
+  def remove_peer(sock)
+    @peer_lock.synchronize do 
+      id = @peer_data[sock][:id]
+      @peers.delete(sock)
+      @peer_data.delete_sock
+      @reverse_peer_data.delete(id)
+    end
+  end
+
   def accept_client
     ready = IO.select([@main_sock]+@peers)
     ready[0].each do |sock|
@@ -46,7 +55,7 @@ class SignalSender
         str = sock.recv(PACKET_SIZE)
         if str.empty?
           #puts "Receiver disconnected"
-          @peers.delete(sock)
+          remove_peer(sock)
         else
           #puts "Receiver message:#{str}"
           if str =~ /GET_TOKEN (\d+) (\d+) (.+)/i
@@ -72,7 +81,7 @@ class SignalSender
     @peer_lock.synchronize do 
       @peers.each do |peer|
         if peer.closed?
-          @peers.delete(peer)
+          remove_peer(sock)
         else
           peer.puts "GO #{time} #{@originator.name}"
         end
@@ -84,7 +93,7 @@ class SignalSender
     @peer_lock.synchronize do 
       @peers.each do |peer|
         if peer.closed?
-          @peers.delete(peer)
+          remove_peer(sock)
         else
           peer.puts "STOP #{time} #{@originator.name}"
         end
@@ -98,7 +107,7 @@ class SignalSender
     @peer_lock.synchronize do 
       @peers.each do |peer|
         if peer.closed?
-          @peers.delete(peer)
+          remove_peer(sock)
         else
           @result = true
           peer.puts "ADD_TOKEN #{time} #{@originator.name} #{token}"

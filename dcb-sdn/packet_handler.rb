@@ -4,13 +4,24 @@ class PacketHandler
 
   def initialize(pkt_buf,port)
     @pkt_buf = pkt_buf
-    @block_buf = []
     @port = port
+    connection_data_reset
+    @lock_file = File.open("test")
+    @stop = false
+  end
+
+  def connection_data_reset
+    @block_buf = []
     @wait_for_packet = false
     @recv_buff = [false]*CLI_ACK_SLICE_PKT
     @recv_count = 0
     @task_cnt = 0
-    @lock_file = File.open("test")
+
+  end
+
+  def end_connection
+    connection_data_reset
+    @pkt_buf.end_connection(@port)
   end
 
   def run_loop
@@ -22,6 +33,9 @@ class PacketHandler
       pkt = extract_next_packet
       if pkt
         process_packet(pkt)
+        if @stop
+          break
+        end
       elsif !@wait_for_packet
         execute_next_action
       end
@@ -124,6 +138,8 @@ class PacketHandler
       process_data_packet(pkt)
     when "data ack"
       process_ack_request(pkt)
+    when "end connection"
+      end_connection
     end
   end
 
@@ -198,9 +214,8 @@ class ActivePacketHandler < PacketHandler
       send_and_wait_for_ack if DCB_SENDER_REQUIRE_ACK
       i += 1
       if @stop
-        #end_connection
-        puts "Ending Connection..."
-        sleep
+        end_connection
+        break
       end
       if i % 100 == 0
         puts "remain token: #{@token}"
@@ -215,6 +230,15 @@ class ActivePacketHandler < PacketHandler
       #sleep rand(1) + rand*3
     end
     #sleep rand(1)+rand
+  end
+
+  def end_connection
+    @token_getter.get_token(1,1) 
+    req = {}
+    req[:is_request] = true
+    req[:type] = "end connection"
+    #puts "傳輸資料ACK"
+    write_packet_req(req)
   end
   
   def write_ack_req
