@@ -61,11 +61,6 @@ class PacketBuffer
     #@data_lock = Mutex.new
     @disk_lock = Mutex.new
     @send_ok = false
-=begin
-    @recv_buff = [false]*CLI_ACK_SLICE_PKT
-    @recv_count = 0
-    @task_cnt = 0
-=end
   end
 
   def name
@@ -117,35 +112,6 @@ class PacketBuffer
           end
         end
       end
-=begin
-      sleep 0.000001
-      CLI_ACK_SLICE_PKT.times do 
-        noread = true
-        begin 
-          pack = sock.recvfrom_nonblock(PACKET_SIZE)  #=> ["aaa", ["AF_INET", 33302, "localhost.localdomain", "127.0.0.1"]]
-          size = pack[0].size
-          pkt = {}
-          pkt[:port] = port
-          pkt[:size] = size
-          pkt[:req] = parse_command(pack[0])
-          pkt[:msg] = pack[0]
-          @data_locks[port].synchronize do
-            if store_packet(pkt)
-              # store success 
-            else 
-              @total_rx_loss[port] += 1
-              puts "Packet Buffer full when adding packet from #{port}!"
-            end
-            noread = false
-          end
-        rescue IO::WaitReadable
-        end
-        if noread
-          #print "No read"
-          sleep 0.00001
-        end
-      end
-=end
       stop_go_check
     end
 
@@ -197,38 +163,6 @@ class PacketBuffer
           end
         end
       end
-
-=begin
-      #@data_lock.synchronize do
-        #CLI_ACK_SLICE_PKT.times do 
-          noread = true
-          @peers.each do |port,sock|
-            begin 
-              pack = sock.recvfrom_nonblock(PACKET_SIZE)  #=> ["aaa", ["AF_INET", 33302, "localhost.localdomain", "127.0.0.1"]]
-              size = pack[0].size
-              pkt = {}
-              pkt[:port] = port
-              pkt[:size] = size
-              pkt[:req] = parse_command(pack[0])
-              pkt[:msg] = pack[0]
-              if store_packet(pkt)
-                # store success 
-              else 
-                @total_rx_loss[port] += 1
-                 puts "Packet Buffer full when adding packet from #{port}!"
-              end
-              noread = false
-            rescue IO::WaitReadable
-            end
-          end
-          if noread
-            #print "No read"
-            #sleep 0.00001
-          end
-        #end
-      #end
-=end
-
       stop_go_check
     end
   end
@@ -251,30 +185,12 @@ class PacketBuffer
     if @free_token > 0
       notify_token
     end
-    
   end
 
   def stop_go_check
     if @free_token > 0
       notify_token
     end
-    return
-    if DCB_SERVER_BUFFER_PKT_SIZE -  @available > DCB_SERVER_BUFFER_STOP_THRESHOLD
-      now = Time.now
-      if @previous_state == :go || now - @last_check > 1
-        @last_check = now
-        @previous_state = :stop
-        notify_stop
-      end
-    elsif DCB_SERVER_BUFFER_PKT_SIZE -  @available < DCB_SERVER_BUFFER_GO_THRESHOLD
-      now = Time.now
-      if @previous_state == :stop || now - @last_check > 1
-        @last_check = now
-        @previous_state = :go
-        notify_go
-      end
-    end
-
   end
 
   def stop_go_check_loop
@@ -310,53 +226,6 @@ class PacketBuffer
   end
 
   def store_packet(pkt)
-=begin
-    @total_rx[pkt[:port]] += pkt[:size]
-
-    task_n = pkt[:req][:task_no]
-    if task_n != @task_cnt
-      puts "錯誤的大編號：#{task_n}，預期：#{@task_cnt}"
-      CLI_ACK_SLICE_PKT.times do |i|
-        @recv_buff[i] = false
-      end
-      @total_rx_loss[pkt[:port]] += (CLI_ACK_SLICE_PKT - @recv_count  + CLI_ACK_SLICE_PKT * (task_n - @task_cnt - 1))
-      @recv_count = 0
-      @task_cnt = task_n
-    end
-
-    sub_n = pkt[:req][:sub_no][0]
-    #puts "#{task_n}:#{sub_n}"
-    #print "收到編號：#{sub_n}，"
-    if @recv_buff[sub_n]
-      # exist
-      #puts "重複封包：#{sub_n}"
-    else
-      # not exist
-      #puts "正確編號：#{sub_n}"
-      @recv_buff[sub_n] = true
-      @recv_count += 1
-      # full?
-      if @recv_count == CLI_ACK_SLICE_PKT
-        # full
-        CLI_ACK_SLICE_PKT.times do |i|
-          @recv_buff[i] = false
-        end
-        @recv_count = 0
-        # IO
-        @disk_lock.synchronize do
-          #sleep 0.03
-        end
-        @task_cnt += 1
-        #puts @task_cnt
-      else
-        # not full
-      end
-    end
-    return true 
-
-
-
-=end
     if @available > 0
       @available -= 1
       @data[pkt[:port]] << pkt
