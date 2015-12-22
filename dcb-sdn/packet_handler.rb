@@ -154,6 +154,7 @@ class ActivePacketHandler < PacketHandler
   def initialize(pkt_buf,port)
     super(pkt_buf,port)
     @token = 0
+    @stop = false
   end
 
   # DEBUG
@@ -172,6 +173,7 @@ class ActivePacketHandler < PacketHandler
     end
     loop do
       #sleep 0.5
+      #(rand(100)+1).times do
       while @token < CLI_ACK_SLICE_PKT + DCB_SDN_EXTRA_TOKEN_USED
         min = CLI_ACK_SLICE_PKT + DCB_SDN_EXTRA_TOKEN_USED - @token
         max = min * (can_get ? 1 : 1)
@@ -193,18 +195,24 @@ class ActivePacketHandler < PacketHandler
         end
       end
       
-      #send_and_wait_for_ack
-      #sleep 0.02
+      send_and_wait_for_ack if DCB_SENDER_REQUIRE_ACK
       i += 1
+      if @stop
+        #end_connection
+        puts "Ending Connection..."
+        sleep
+      end
       if i % 100 == 0
         puts "remain token: #{@token}"
         sleep rand(3)
       end
-      if i >= 1000
+      if i >= 500
         puts "remain token: #{@token}"
         can_get = false
         sleep if @token <= 0
       end
+      #end # end times
+      #sleep rand(1) + rand*3
     end
     #sleep rand(1)+rand
   end
@@ -228,7 +236,7 @@ class ActivePacketHandler < PacketHandler
       else
         # Timedout
         puts "重新傳輸ACK request"
-        @token_getter.get_token(1,1) if !DCB_SDN_PREMATURE_ACK 
+        @token_getter.get_token(1,1) 
         write_ack_req
 
       end
@@ -236,7 +244,11 @@ class ActivePacketHandler < PacketHandler
   end
 
   def execute_next_action
+  end
 
+  def cleanup
+    super
+    @stop = true
   end
 end
 

@@ -45,8 +45,8 @@ end
 begin
   sleep
 rescue SystemExit, Interrupt
-  thr_port.exit
-  $signal_recv.cleanup
   $peer.cleanup
+  thr_port.join
+  $signal_recv.cleanup
   puts "client結束"
 end

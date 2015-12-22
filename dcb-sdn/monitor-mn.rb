@@ -83,7 +83,8 @@ end
 
 
 
-$signal_sender.bind_port(DCB_SIGNAL_SENDER_PORT + dcb_get_sw_port_shift($sw))
+puts "Binding: #{DCB_SIGNAL_SENDER_PORT + dcb_get_sw_port_shift($sw) + $eth.to_i}"
+$signal_sender.bind_port(DCB_SIGNAL_SENDER_PORT + dcb_get_sw_port_shift($sw) + $eth.to_i)
 $monitor = SwitchMonitor.new($signal_sender)
 $signal_sender.originator = $monitor
 thr_signal_accept = run_accept_thread

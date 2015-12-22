@@ -108,9 +108,7 @@ class PacketBuffer
                 # store success 
               else 
                 @total_rx_loss[port] += 1
-                @token_lock.synchronize do
-                  @free_token += 1
-                end
+               add_free_token(1)
                 #puts "Packet Buffer full when adding packet from #{port}!"
               end
             rescue IO::WaitReadable
@@ -178,13 +176,12 @@ class PacketBuffer
                 req[:is_reply] = true
                 acks << pkt
                 @total_rx[port] += PACKET_SIZE
+                add_free_token(1)
               elsif store_packet(pkt)
                 # store success 
               else 
                 @total_rx_loss[port] += 1
-                @token_lock.synchronize do
-                  @free_token += 1
-                end
+                add_free_token(1)
                 #puts "Packet Buffer full when adding packet from #{port}!"
               end
             rescue IO::WaitReadable
@@ -301,10 +298,12 @@ class PacketBuffer
 
   def notify_token
     if @notifier
-      @token_lock.synchronize do
-        result = @notifier.notify_token(@free_token)
-        if result
-          @free_token = 0
+      if @free_token >= DCB_RECEIVER_FEEDBACK_THRESHOLD
+        @token_lock.synchronize do
+          result = @notifier.notify_token(@free_token)
+          if result
+            @free_token = 0
+          end
         end
       end
     end
@@ -400,9 +399,7 @@ class PacketBuffer
         @available += get_size_a[0]
       end
     end
-    @token_lock.synchronize do
-      @free_token += get_size_a[0]
-    end
+    add_free_token(get_size_a[0])
     if !@active
       #puts "Free Token: #{@free_token}"
     end

@@ -11,66 +11,31 @@ $signal_sender.bind_port(DCB_SDN_CTRL_PORT)
 thr_signal_accept = run_accept_thread
 
 
-class Controller
-  attr_reader :sender
+# Hold a token to specific switch or receiver
+class TokenHolder
+  
+  attr_reader :id
+  attr_reader :token
   attr_reader :receiver
-  attr_reader :host_token
-  attr_reader :switch_token
-
-  def initialize(sender)
-    # Token init 
-    @host_token = 0
-    @switch_token = 0
-    @token_lock = Mutex.new
-    # bind sender
-    @sender = sender
-    @sender.originator = self
-    # Connect to all switch and end host
-    connect_end_hosts
-    connect_switches
-
+  
+  def initialize(master,id,receiver)
+    @master = master
+    @id = id
+    @receiver = receiver
+    @token = 0
+    @token_lock = @master.holder_lock#Mutex.new
   end
-
-  def connect_end_hosts
-    @end_host = SignalReceiver.new(["172.16.0.1",DCB_SIGNAL_SENDER_PORT])
-    @end_host.send_token_method = method(:send_token_host)
-    @end_host.notifier = self
-    @end_host.connect_peer
-  end
-
-  def connect_switches
-    @switch = SignalReceiver.new(["127.0.0.1",DCB_SIGNAL_SENDER_PORT + dcb_get_sw_port_shift("s1")])
-    @switch.send_token_method = method(:send_token_switch)
-    @switch.notifier = self
-    @switch.connect_peer
-  end
- 
-  # NEED LOCKED!
-  def dispatch_token(time,min_req = 0)
-    min_token = [@host_token,@switch_token].min
-    if min_token >= min_req
-      used_min_token = @sender.dispatch_token(min_token,time)
-      diff = min_token - used_min_token
-      if diff > 0
-        @host_token -= diff
-        @switch_token -= diff
-        #puts "#{diff} Token Dispatched, host = #{@host_token}, switch = #{@switch_token}"
-      end
-    end
-  end
-
-  def run_receiver_thread
-    @thr_host = Thread.new do
-      @end_host.run_loop
-    end
-    @thr_switch = Thread.new do
-      @switch.run_loop
-    end
-  end
-
   #/////////////////
   # For Receiver API
   #/////////////////
+  
+  def send_token(token,time)
+    @token_lock.synchronize do
+      @token += token
+    end
+  end
+
+  
   def show_cmd
     false
   end
@@ -82,32 +47,136 @@ class Controller
   def send_stop(*args)
 
   end
+
+  def run_receiver_thread
+    @thr_recv = Thread.new do
+      @receiver.run_loop
+    end
+  end
+
+  def consume_token(val)
+    @token -= val
+  end
+
+end
+
+class TokenManager
+
+  attr_reader :holder_lock
+
+  def initialize
+    @token_holders = {}
+    @holder_lock = Mutex.new
+    connect_end_hosts
+    connect_switches
+    create_holder_map
+  end
   
-  def send_token_host(token,time)
-    @token_lock.synchronize do
-      @host_token += token
-      #puts "Host Token: #{@host_token} (+#{token})"
-      dispatch_token(time)
+  def connect_end_hosts
+    RECEIVER_HOSTS.each do |id|
+      recv = SignalReceiver.new(["172.16.0.1",DCB_SIGNAL_SENDER_PORT])
+      hold = TokenHolder.new(self,id,recv)
+      recv.send_token_method = hold.method(:send_token)
+      recv.notifier = hold
+      recv.connect_peer
+      @token_holders[id] = hold
     end
   end
 
-  def send_token_switch(token,time)
-    @token_lock.synchronize do
-      @switch_token += token
-      @switch_token = DCB_SDN_MAX_SWITCH_QUEUE_LENGTH if @switch_token > DCB_SDN_MAX_SWITCH_QUEUE_LENGTH
-      #puts "Switch Token: #{@switch_token} (+#{token})"
-      dispatch_token(time)
+  def connect_switches
+    QOS_INFO.each do |id,data|
+      recv = SignalReceiver.new(["127.0.0.1",DCB_SIGNAL_SENDER_PORT + dcb_get_sw_port_shift(data[:sw]) + data[:eth].to_i])
+      hold = TokenHolder.new(self,id,recv)
+      recv.send_token_method = hold.method(:send_token)
+      recv.notifier = hold
+      recv.connect_peer
+      @token_holders[id] = hold
     end
   end
 
+  def run_receiver_thread
+    @token_holders.each_value do |hold|
+      hold.run_receiver_thread
+    end
+  end
+
+  # extract tokens from list of holders
+  def extract_tokens(holders,min,max)
+    #puts "Getting from #{holders.collect{|h| h.id}.inspect}"
+    min_free = holders.min_by {|h| h.token}.token
+    if min_free < min
+      return 0
+    else
+      dispatch = [min_free,max].min
+      holders.each do |holder|
+        holder.consume_token(dispatch)
+      end
+      return dispatch
+    end
+  end
+
+  def inspect_holders
+    @token_holders.each do |id,holder|
+      print "[#{id}]:#{holder.token}, "
+    end
+    puts 
+  end
+
+  # Map host to array of holder
+  def create_holder_map
+    @holder_map = {}
+    HOST_UPSTREAM_SWITCH.each do |host,sw|
+      @holder_map[host] = [@token_holders["172.16.0.1"]] + sw.collect {|sw| @token_holders[sw]}
+    end
+  end
+
+  # from sender id, get list of holders
+  def get_holders(id)
+    @holder_map[id]
+  end
+
+  def require_token(id,min,max)
+    #puts "Require from:#{id}"
+    @holder_lock.synchronize do
+      holders = get_holders(id)
+      @val =  extract_tokens(holders,min,max)
+    end
+    #inspect_holders
+    return @val
+  end
+
+end
+
+class Controller
+  attr_reader :sender
+  attr_reader :token_mgmt
+
+  def initialize(sender)
+    # bind sender
+    @sender = sender
+    @sender.originator = self
+    # Token manager
+    @token_mgmt = TokenManager.new
+  end
+
+ 
+  def run_receiver_thread
+    @token_mgmt.run_receiver_thread
+  end
+
+  
   #/////////////////
   # For Sender API
   #/////////////////
-  def new_token_request(min,time)
+  def new_token_request(id,min,max,time)
     #puts "New request for token: #{min}"
-    @token_lock.synchronize do
-      dispatch_token(time,min) 
+    send = 0
+    loop do
+      send = @token_mgmt.require_token(id,min,max)
+      break if send > 0
+      sleep 0.01
     end
+    @sender.dispatch_token_id(id,send,time) 
   end
 
   def new_receiver
@@ -129,6 +198,6 @@ $controller.run_receiver_thread
 
 
 loop do
-  puts "Host = #{$controller.host_token}, Switch = #{$controller.switch_token}"
+  $controller.token_mgmt.inspect_holders
   sleep 0.1
 end

@@ -14,6 +14,7 @@ class SignalSender
   def initialize
     @peers = []
     @peer_data = {}
+    @reverse_peer_data = {}
     @peer_lock = Mutex.new
     @peer_data_lock = Mutex.new
   end
@@ -28,19 +29,14 @@ class SignalSender
       if sock == @main_sock
         new_sock = @main_sock.accept
         #puts "New receiver connected"
-=begin
-        if @originator
-          case @originator.previous_state
-          when :go
-            new_sock.puts "GO #{Time.now.to_f} #{@originator.name}"
-          when :stop
-            new_sock.puts "STOP #{Time.now.to_f} #{@originator.name}"
-          end
-        end
-=end
+        addr = new_sock.peeraddr(false)
+        #id = "#{addr[3]}:#{addr[1]}"
+        id = addr[3]
+        simple = addr[3] != '172.16.0.1'
         @peer_lock.synchronize do 
           @peers << new_sock
-          @peer_data[new_sock] = {min: 0,max: 0}
+          @peer_data[new_sock] = {min: 0,max: 0,id: id,addr: addr,simple: simple}
+          @reverse_peer_data[id] = new_sock
         end
         if @originator
           @originator.new_receiver
@@ -62,7 +58,7 @@ class SignalSender
               data[:min] = min
               data[:max] = max
             end
-            @originator.new_token_request(min,time)
+            @originator.new_token_request(data[:id],min,max,time)
           else
 
           end
@@ -110,6 +106,24 @@ class SignalSender
       end
     end
     @result
+  end
+
+  def dispatch_token_id(id,send,time)
+    sock = @reverse_peer_data[id]
+    if !sock.closed?
+      @peer_data_lock.synchronize do
+        data = @peer_data[sock]
+        data[:min] = [data[:min] - send,0].max
+        data[:max] -= send
+      end
+      sock.puts "GIVE_TOKEN #{time} #{@originator.name} #{send}"
+    else
+      remove_peer(sock)
+    end
+  end
+
+  def remove_peer(sock)
+    @peer_data.delete(sock)
   end
 
   def dispatch_token(free,time)

@@ -72,14 +72,17 @@ DCB_SERVER_BUFFER_GO_THRESHOLD = DCB_SERVER_BUFFER_PKT_SIZE * 0.5
 DCB_SIGNAL_SENDER_PORT = 9001
 DCB_PREMATURE_ACK = true
 DCB_CEHCK_MAJOR_NUMBER = true
+DCB_SENDER_REQUIRE_ACK = true
 
 # DCB-SDN
 DCB_SDN_PREMATURE_ACK = DCB_PREMATURE_ACK
-DCB_SDN_EXTRA_TOKEN_USED = DCB_SDN_PREMATURE_ACK ? 0 : 1
+DCB_SDN_EXTRA_TOKEN_USED = !DCB_SENDER_REQUIRE_ACK ? 0 : 1
 DCB_SDN_CTRL_ADDR = "172.16.0.253"
 DCB_SDN_CTRL_PORT = 10100
 DCB_SDN_MAX_TOKEN = 4500
-DCB_SDN_MAX_SWITCH_QUEUE_LENGTH = 950
+DCB_SDN_MAX_SWITCH_QUEUE_LENGTH = 925
+
+DCB_RECEIVER_FEEDBACK_THRESHOLD =  DCB_SDN_EXTRA_TOKEN_USED + CLI_ACK_SLICE_PKT 
 
 # QoS資料
 QOS_INFO = {}
@@ -209,19 +212,19 @@ when /linearTopoK4N2-single/i
   add_qos_info('s4','3',[1,2])
   # Backward 
   # s1 
-  add_qos_info('s1','2',[1],5005..5005)
-  add_qos_info('s1','3',[1],[5002,5003,5004,5006,5007,5008])
+  #add_qos_info('s1','2',[1],5005..5005)
+  #add_qos_info('s1','3',[1],[5002,5003,5004,5006,5007,5008])
   # s2
-  add_qos_info('s2','1',[3],5002..5002)
-  add_qos_info('s2','2',[3],5006..5006)
-  add_qos_info('s2','4',[3],[5003,5004,5007,5008])
+  #add_qos_info('s2','1',[3],5002..5002)
+  #add_qos_info('s2','2',[3],5006..5006)
+  #add_qos_info('s2','4',[3],[5003,5004,5007,5008])
   # s3
-  add_qos_info('s3','1',[3],5003..5003)
-  add_qos_info('s3','2',[3],5007..5007)
-  add_qos_info('s3','4',[3],[5004,5008])
+  #add_qos_info('s3','1',[3],5003..5003)
+  #add_qos_info('s3','2',[3],5007..5007)
+  #add_qos_info('s3','4',[3],[5004,5008])
   # s4
-  add_qos_info('s4','1',[3],5004..5004)
-  add_qos_info('s4','2',[3],5008..5008)
+  #add_qos_info('s4','1',[3],5004..5004)
+  #add_qos_info('s4','2',[3],5008..5008)
 
 
   #NO_SPEED_LIMIT_FOR = ["s2-eth3","s3-eth3","s4-eth3"]
@@ -243,6 +246,12 @@ when /linearTopoK4N2-single/i
     "s3-eth3" => ["s4-eth3"]
     # Backward
   }
+  
+  RECEIVER_HOSTS = [
+    HOST[1]
+  ]
+
+  
   ## STARTING ORDER 
   MULTIPLE_STARTING = true
   STARTING_ORDER = []
@@ -276,9 +285,11 @@ end
 
 # Compute host upstream 
 HOST_UPSTREAM_SWITCH = {}
-UPSTREAM_INFO.each do |sw,host_array|
-  host_array.each do |host|
-    HOST_UPSTREAM_SWITCH[host] ||= []
-    HOST_UPSTREAM_SWITCH[host] << sw
+if defined? UPSTREAM_INFO
+  UPSTREAM_INFO.each do |sw,host_array|
+    host_array.each do |host|
+      HOST_UPSTREAM_SWITCH[host] ||= []
+      HOST_UPSTREAM_SWITCH[host] << sw
+    end
   end
 end
