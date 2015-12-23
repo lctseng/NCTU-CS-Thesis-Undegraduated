@@ -7,11 +7,11 @@ require 'socket'
 require 'thread'
 require 'qos-lib'
 require 'packet_buffer'
-require 'signal_sender'
 require 'packet_handler'
+require 'control_api'
 
 
-SERVER_OPEN_PORT_RANGE = 5002..5008
+SERVER_OPEN_PORT_RANGE = 5001..5008
 #SERVER_OPEN_PORT_RANGE = 5005..5005
 #SERVER_OPEN_PORT_RANGE = 5002..5002
 #SERVER_OPEN_PORT_RANGE = 5008..5008
@@ -21,22 +21,29 @@ if SERVER_RANDOM_FIXED_SEED
   srand(0)
 end
 
+$host_ip = ARGV[1]
+if !$host_ip
+  puts "Host IP required"
+  exit
+end
+
 
 def run_port_thread(port)
   thr = Thread.new do 
-    receiver = PassivePacketHandler.new($pkt_buf,port)
+    receiver = PassivePacketHandler.new($pkt_buf,PASSIVE_PORT_TO_IP[port],port)
+    $control_api.register_handler(receiver)
     receiver.run_loop
   end
 end
 
-def run_port_read_thread(port)
-  thr = Thread.new do
-    $pkt_buf.run_port_receive_loop(port)
-  end
-end
 def run_read_thread
   thr = Thread.new do
     $pkt_buf.run_receive_loop
+  end
+end
+def run_control_thread
+  thr = Thread.new do
+    $control_api.run_main_loop
   end
 end
 
@@ -57,17 +64,29 @@ if pid = fork
 else
   pipe_r.close
   $stdout.reopen pipe_w
-  $signal_sender.bind_port(DCB_SIGNAL_SENDER_PORT)
-  $pkt_buf = PacketBuffer.new("0.0.0.0",SERVER_OPEN_PORT_RANGE)
-  $pkt_buf.notifier = $signal_sender
-  $signal_sender.originator = $pkt_buf
+  
+  $pkt_buf = PacketBuffer.new($host_ip,$host_ip,SERVER_OPEN_PORT_RANGE)
 
-  thr_accept = run_accept_thread
+  holder_list = TARGET_HOSTS_ID[$host_ip].join(',') # who will you send?
+  $control_api = ControlAPI.new($host_ip,$host_ip,holder_list)
+  $pkt_buf.register_control_api($control_api)
+ 
+  # ///////////
+  # Control Loop
+  # ///////////
+  thr_control = run_control_thread
 
+
+  # ///////////
+  # Pkt Buffer: stop_go_check
+  # ///////////
   thr_stop_go_loop = Thread.new do
     $pkt_buf.stop_go_check_loop
   end
 
+  # ///////////
+  # Pkt Buffer: writer loop (for premature acks)
+  # ///////////
   thr_write = []
   (SERVER_OPEN_PORT_RANGE).each do |port|
     thr_write << Thread.new do
@@ -75,17 +94,21 @@ else
     end
   end
 
-  #thr_read = []
-  #(SERVER_OPEN_PORT_RANGE).each do |port|
-  #  thr_read << run_port_read_thread(port)
-  #end
+  # ///////////
+  # Pkt Buffer: read loop
+  # ///////////
   thr_read = run_read_thread
   
+  # ///////////
+  # Pkt Handler: per-port loop
+  # ///////////
   thr_port = []
   (SERVER_OPEN_PORT_RANGE).each do |port|
     thr_port << run_port_thread(port)
   end
+  # ///////////
   # main:show info
+  # ///////////
   last_rx_size = {}
   last_tx_size = {}
   (SERVER_OPEN_PORT_RANGE).each do |port|

@@ -6,7 +6,7 @@ UNIT_KILO = 10**3
 ENABLE_CONTROL = true
 UNIT_MEGA = UNIT_KILO**2
 MAX_TOTAL_SPEED = UNIT_KILO**3 # 整體最大速度
-MAX_SPEED = 50*UNIT_MEGA # 最大速度
+MAX_SPEED = 100*UNIT_MEGA # 最大速度
 MAX_SPEED_M = MAX_SPEED / UNIT_MEGA
 CLEAR_OLD = true # 是否刪除舊資料
 MAX_NOTIFICATION_INTERVAL = 0.1
@@ -70,7 +70,7 @@ DCB_SERVER_BUFFER_PKT_SIZE = 10000 # server application memory buffer for 100000
 DCB_SERVER_BUFFER_STOP_THRESHOLD = DCB_SERVER_BUFFER_PKT_SIZE * 0.7
 DCB_SERVER_BUFFER_GO_THRESHOLD = DCB_SERVER_BUFFER_PKT_SIZE * 0.5
 DCB_SIGNAL_SENDER_PORT = 9001
-DCB_PREMATURE_ACK = true
+DCB_PREMATURE_ACK = false
 DCB_CEHCK_MAJOR_NUMBER = true
 DCB_SENDER_REQUIRE_ACK = true
 
@@ -82,7 +82,20 @@ DCB_SDN_CTRL_PORT = 10100
 DCB_SDN_MAX_TOKEN = 4500
 DCB_SDN_MAX_SWITCH_QUEUE_LENGTH = 925
 
-DCB_RECEIVER_FEEDBACK_THRESHOLD =  1#DCB_SDN_EXTRA_TOKEN_USED + CLI_ACK_SLICE_PKT 
+DCB_RECEIVER_FEEDBACK_THRESHOLD =  100#DCB_SDN_EXTRA_TOKEN_USED + CLI_ACK_SLICE_PKT 
+DCB_SWITCH_FEEDBACK_THRESHOLD =  50
+
+
+PASSIVE_PORT_TO_IP = {
+  5001 => '172.16.0.1',
+  5002 => '172.16.0.2',
+  5003 => '172.16.0.3',
+  5004 => '172.16.0.4',
+  5005 => '172.16.0.5',
+  5006 => '172.16.0.6',
+  5007 => '172.16.0.7',
+  5008 => '172.16.0.8'
+}
 
 # QoS資料
 QOS_INFO = {}
@@ -209,6 +222,45 @@ when /linearTopoK4N2-multi/i
     HOST[2] => [HOST[3],HOST[4],HOST[7],HOST[8]],
     HOST[6] => [HOST[1],HOST[5]]
   }
+  # define senders
+  PACKET_SENDERS = {
+    # Forward
+    "#{HOST[2]}:5003" => HOST[3],
+    "#{HOST[2]}:5004" => HOST[4],
+    "#{HOST[2]}:5007" => HOST[7],
+    "#{HOST[2]}:5008" => HOST[8],
+    
+    "#{HOST[6]}:5001" => HOST[1],
+    "#{HOST[6]}:5005" => HOST[5],
+    # Backward
+    "#{HOST[3]}:5003" => HOST[2],
+    "#{HOST[4]}:5004" => HOST[2],
+    "#{HOST[7]}:5007" => HOST[2],
+    "#{HOST[8]}:5008" => HOST[2],
+
+    "#{HOST[1]}:5001" => HOST[6],
+    "#{HOST[5]}:5005" => HOST[6]
+  }
+  # define packet flow
+  PACKET_FLOWS = {
+    # Forward
+    "#{HOST[2]}:5003" => ["s3-eth3","s2-eth1",HOST[2]],
+    "#{HOST[2]}:5004" => ["s4-eth3","s3-eth3","s2-eth1",HOST[2]],
+    "#{HOST[2]}:5007" => ["s3-eth3","s2-eth1",HOST[2]],
+    "#{HOST[2]}:5008" => ["s4-eth3","s3-eth3","s2-eth1",HOST[2]],
+    
+    "#{HOST[6]}:5001" => ["s1-eth3","s2-eth2",HOST[6]],
+    "#{HOST[6]}:5005" => ["s1-eth3","s2-eth2",HOST[6]],
+    # Backward
+    "#{HOST[3]}:5003" => ["s2-eth4","s3-eth1",HOST[3]],
+    "#{HOST[4]}:5004" => ["s2-eth4","s3-eth4","s4-eth1",HOST[4]],
+    "#{HOST[7]}:5007" => ["s2-eth4","s3-eth2",HOST[7]],
+    "#{HOST[8]}:5008" => ["s2-eth4","s3-eth4","s4-eth2",HOST[8]],
+
+    "#{HOST[1]}:5001" => ["s2-eth3","s1-eth1",HOST[1]],
+    "#{HOST[5]}:5005" => ["s2-eth3","s1-eth2",HOST[5]]
+
+  }
 
 when /linearTopoK4N2-single/i
 
@@ -308,5 +360,15 @@ if defined? RECEIVER_HOSTS
     hosts.each do |host|
       HOST_UPSTREAM_HOST[host] = recv
     end
+  end
+end
+# Compute  
+TARGET_HOSTS_ID = {}
+if defined? PACKET_SENDERS
+  PACKET_SENDERS.each do |target,sender|
+    if !TARGET_HOSTS_ID.has_key? sender
+      TARGET_HOSTS_ID[sender] = []
+    end
+    TARGET_HOSTS_ID[sender] << target
   end
 end

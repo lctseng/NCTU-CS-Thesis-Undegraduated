@@ -1,6 +1,10 @@
+require_relative 'config'
 require 'thread'
+require 'token_adder'
 
 class PacketBuffer
+
+  include TokenAdder
 
   attr_reader :data
   attr_reader :available
@@ -11,12 +15,17 @@ class PacketBuffer
   attr_accessor :notifier
   attr_reader :disk_lock
   attr_reader :send_ok
-  attr_reader :previous_state
 
-  def initialize(address,range,active = false)
+  attr_reader :control_api
+  attr_reader :active
+  attr_reader :my_addr
+
+
+  def initialize(my_addr,peer_addr,range,active = false)
     @active = active
     @last_check = Time.at(0)
-    @address =address
+    @my_addr = my_addr
+    @peer_addr = peer_addr
     @range = range
     @peers = {}
     @sock_data = {}
@@ -43,10 +52,10 @@ class PacketBuffer
       @sock_data[sock] = port
       @peers_list << sock
       if active
-        @peers[port].bind("0.0.0.0",port)
-        @peers[port].connect(address,port)
+        @peers[port].bind(my_addr,port)
+        @peers[port].connect(peer_addr,port)
       else
-        @peers[port].bind(address,port)
+        @peers[port].bind(my_addr,port)
       end
       @total_rx[port] = 0
       @total_tx[port] = 0
@@ -57,12 +66,18 @@ class PacketBuffer
     @free_token = [(@available * 0.9).round,DCB_SDN_MAX_TOKEN].min
     @temp_free_token = 0
     @token_lock = Mutex.new
-    @previous_state = :go
     #@data_lock = Mutex.new
     @disk_lock = Mutex.new
     @send_ok = false
     @stop_receive = false
   end
+
+
+  def post_register
+    notify_token  
+  end
+ 
+
 
   def end_connection(port)
 
@@ -80,52 +95,9 @@ class PacketBuffer
     true
   end
 
-  def send_stop(*args)
-    @send_ok = false
-  end
-
-  def send_go(*args)
-    @send_ok = true
-  end
-
   def send_token(token,time)
   end
 
-
-  def run_port_receive_loop(port)
-    sock = @peers[port]
-    loop do
-      ready = IO.select([@peers[port]])
-      @data_locks[port].synchronize do
-        ready[0].each do |sock|
-          loop do
-            begin 
-              pack = sock.recvfrom_nonblock(PACKET_SIZE)  #=> ["aaa", ["AF_INET", 33302, "localhost.localdomain", "127.0.0.1"]]
-              size = pack[0].size
-              pkt = {}
-              pkt[:port] = port
-              pkt[:size] = size
-              pkt[:req] = parse_command(pack[0])
-              pkt[:msg] = pack[0]
-              pkt[:peer] = pack[1]
-              if store_packet(pkt)
-                # store success 
-              else 
-                @total_rx_loss[port] += 1
-               add_free_token(1)
-                #puts "Packet Buffer full when adding packet from #{port}!"
-              end
-            rescue IO::WaitReadable
-              break
-            end
-          end
-        end
-      end
-      stop_go_check
-    end
-
-
-  end
 
   def run_receive_loop
     loop do
@@ -209,23 +181,12 @@ class PacketBuffer
     end
   end
 
-  def notify_stop
-    if @notifier
-      @notifier.notify_stop
-    end
-  end
-
-  def notify_go
-    if @notifier
-      @notifier.notify_go
-    end
-  end
 
   def notify_token
-    if @notifier
+    if @control_api
       if @free_token >= DCB_RECEIVER_FEEDBACK_THRESHOLD
         @token_lock.synchronize do
-          result = @notifier.notify_token(@free_token)
+          result = control_add_token(@free_token)
           if result
             @free_token = 0
           end

@@ -1,13 +1,54 @@
 class PacketHandler
 
-  attr_reader :lock_file
+  attr_reader :id
+  attr_reader :peer_ip
+  attr_reader :port
 
-  def initialize(pkt_buf,port)
+  attr_reader :token
+  attr_reader :lock_file
+  attr_accessor :token_getter
+
+  attr_reader :token_lock
+  attr_reader :token_ready
+
+  def give_token(n,time)
+    @token_lock.synchronize do
+      @token += n
+      @token_ready.signal
+    end
+    printf "Token #{n} Got, Delay %7.3f ms\n",(Time.now.to_f - time)*1000
+  end
+
+  def ensure_token(min,max)
+    @token_lock.synchronize do
+      while @token < min
+        get_min = min - @token
+        get_max = max
+        get_token(get_min,get_max)
+      end
+    end
+  end
+
+  def get_token(min,max)
+    call_time = Time.now
+    @token_getter.get_token(self,min,max)
+    #printf("Token Delay: %7.3f ms\n",(Time.now - call_time)*1000)
+  end
+
+  #
+  def initialize(pkt_buf,peer_ip,port)
     @pkt_buf = pkt_buf
+    @peer_ip = peer_ip
     @port = port
+    @id = "#{peer_ip}:#{port}"
     connection_data_reset
-    @lock_file = File.open("test")
+    @lock_file = File.open("lock_file/#{@pkt_buf.my_addr}.lock","w")
     @stop = false
+    
+    @token = 0
+    @token_lock = Mutex.new
+    @token_ready = ConditionVariable.new
+
   end
 
   def connection_data_reset
@@ -157,19 +198,16 @@ class PacketHandler
 end
 
 class PassivePacketHandler < PacketHandler
-  def initialize(pkt_buf,port)
-    super(pkt_buf,port)
-    pkt_buf.send_go
+  def initialize(pkt_buf,peer_ip,port)
+    super
   end
 end
 
 class ActivePacketHandler < PacketHandler
 
-  attr_accessor :token_getter
 
-  def initialize(pkt_buf,port,total_send)
-    super(pkt_buf,port)
-    @token = 0
+  def initialize(pkt_buf,peer_ip,port,total_send)
+    super(pkt_buf,peer_ip,port)
     @stop = false
     @total_send = total_send
   end
@@ -187,16 +225,15 @@ class ActivePacketHandler < PacketHandler
       req[:sub_no] = [j]
       pkts[j] = pack_command(req)
     end
+    last_time = Time.now
     loop do
-
+      #puts "Start #{i} , interval = #{(Time.now - last_time)*1000}ms"
+      last_time = Time.now
       #sleep 0.5
       #(rand(100)+1).times do
-      while @token < CLI_ACK_SLICE_PKT + DCB_SDN_EXTRA_TOKEN_USED
-        min = CLI_ACK_SLICE_PKT + DCB_SDN_EXTRA_TOKEN_USED - @token
-        max = min * (can_get ? 1 : 1)
-        @token += @token_getter.get_token(min,max)
-      end
-      @token -= CLI_ACK_SLICE_PKT + DCB_SDN_EXTRA_TOKEN_USED
+      min = CLI_ACK_SLICE_PKT + DCB_SDN_EXTRA_TOKEN_USED
+      ensure_token(min,min)
+      @token -= min
       written = 0
       if DCB_CEHCK_MAJOR_NUMBER
         CLI_ACK_SLICE_PKT.times do |j|
@@ -260,7 +297,7 @@ class ActivePacketHandler < PacketHandler
       else
         # Timedout
         puts "重新傳輸ACK request"
-        @token_getter.get_token(1,1) 
+        ensure_token(1,1)
         write_ack_req
 
       end

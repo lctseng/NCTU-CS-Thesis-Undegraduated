@@ -5,8 +5,8 @@ require_relative 'config'
 require 'socket'
 NO_TYPE_REQUIRED = true
 require 'qos-info'
-require 'signal_sender'
-
+require 'control_api'
+require 'token_adder'
 
 $DEBUG = true
 
@@ -57,37 +57,27 @@ end
 
 
 class SwitchMonitor
-
-
-  def initialize(sender)
-    @sender = sender
-  end
-  #/////////////////
-  # For Sender API
-  #/////////////////
-  def new_token_request(*args)
+  include TokenAdder
+  def initialize(id)
+    @id = id
+    @token_buf = 0
+    control_api = ControlAPI.new("127.0.0.1",@id,"")
+    register_control_api(control_api)
   end
 
-  def notify_token(*args)
-    @sender.notify_token(*args)
+  def add_token(n)
+    @token_buf += n
+    if @token_buf >= DCB_SWITCH_FEEDBACK_THRESHOLD
+      control_add_token(@token_buf)
+      @token_buf = 0
+    end
   end
 
-  def new_receiver
-    @sender.notify_token(DCB_SDN_MAX_SWITCH_QUEUE_LENGTH)
-  end
-
-  def name
-    $sw
-  end
 end
 
 
-
-puts "Binding: #{DCB_SIGNAL_SENDER_PORT + dcb_get_sw_port_shift($sw) + $eth.to_i}"
-$signal_sender.bind_port(DCB_SIGNAL_SENDER_PORT + dcb_get_sw_port_shift($sw) + $eth.to_i)
-$monitor = SwitchMonitor.new($signal_sender)
-$signal_sender.originator = $monitor
-thr_signal_accept = run_accept_thread
+$monitor = SwitchMonitor.new($port)
+$monitor.add_token(DCB_SDN_MAX_SWITCH_QUEUE_LENGTH)
 
 last_sent = 0
 # 不斷取得queue len
@@ -109,11 +99,10 @@ begin
       bar_len = (len / 20.0).ceil
       printf("%5d,速度上限：%3d Mbits, 區間已送出: %4d,Queue:%s\n",len,data[:spd],sent_diff,"|"*bar_len) if MONITOR_SHOW_INFO
     end
-    $monitor.notify_token(sent_diff)
+    $monitor.add_token(sent_diff)
     sleep MONITOR_INTERVAL
 
   end
 rescue SystemExit, Interrupt
-  $controller_sock.puts "close"
-  $controller_sock.close
+
 end

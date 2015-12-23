@@ -42,7 +42,7 @@ def parse_command(str)
       $output.puts "封包大小錯誤！"
   end
   req = {}
-  valid,main_type,type,task,sub,data_size,pad = str.split(';')
+  valid,main_type,type,task,sub,data_size,name,extra,pad = str.split(';')
   if valid != PKACKET_VALIDATOR
       $output.puts "封包內容錯誤！"
   end
@@ -57,6 +57,8 @@ def parse_command(str)
   req[:task_no] = task.to_i
   req[:sub_no] = sub.split(',').collect{|s| s.to_i}
   req[:data_size] = data_size.to_i
+  req[:name] = name
+  req[:extra] = extra
   req
 end
 
@@ -74,10 +76,12 @@ def pack_command(req)
   req.ensure_key(:task_no,0)
   req.ensure_key(:sub_no,[0])
   req.ensure_key(:data_size,0)
+  req.ensure_key(:name,"")
+  req.ensure_key(:extra,"")
   # convert
   main_type = req[:is_request] ? "request" : "reply"
   sub_no = req[:sub_no].join(',')
-  info = "#{PKACKET_VALIDATOR};#{main_type};#{req[:type]};#{req[:task_no]};#{sub_no};#{req[:data_size]};"
+  info = "#{PKACKET_VALIDATOR};#{main_type};#{req[:type]};#{req[:task_no]};#{sub_no};#{req[:data_size]};#{req[:name]};#{req[:extra]};"
   pad = '1' * (PACKET_SIZE - info.size)
   return info + pad
 end
