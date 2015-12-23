@@ -253,7 +253,7 @@ class ActivePacketHandler < PacketHandler
     write_ack_req
     loop do
       # get next
-      pkt = extract_next_packet(2)
+      pkt = extract_next_packet(5)
       if pkt && pkt[:req][:type] == "data ack"
         #puts "收到ACK reply"
         break

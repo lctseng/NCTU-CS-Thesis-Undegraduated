@@ -73,8 +73,8 @@ class TokenManager
   end
   
   def connect_end_hosts
-    RECEIVER_HOSTS.each do |id|
-      recv = SignalReceiver.new(["172.16.0.1",DCB_SIGNAL_SENDER_PORT])
+    RECEIVER_HOSTS.each_key do |id|
+      recv = SignalReceiver.new([HOST_IP[id],DCB_SIGNAL_SENDER_PORT])
       hold = TokenHolder.new(self,id,recv)
       recv.send_token_method = hold.method(:send_token)
       recv.notifier = hold
@@ -126,7 +126,7 @@ class TokenManager
   def create_holder_map
     @holder_map = {}
     HOST_UPSTREAM_SWITCH.each do |host,sw|
-      @holder_map[host] = [@token_holders["172.16.0.1"]] + sw.collect {|sw| @token_holders[sw]}
+      @holder_map[host] = [@token_holders[HOST_IP[HOST_UPSTREAM_HOST[host]]]] + sw.collect {|sw| @token_holders[sw]}
     end
   end
 

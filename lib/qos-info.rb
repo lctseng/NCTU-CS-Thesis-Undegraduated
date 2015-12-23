@@ -6,7 +6,7 @@ UNIT_KILO = 10**3
 ENABLE_CONTROL = true
 UNIT_MEGA = UNIT_KILO**2
 MAX_TOTAL_SPEED = UNIT_KILO**3 # 整體最大速度
-MAX_SPEED = 100*UNIT_MEGA # 最大速度
+MAX_SPEED = 50*UNIT_MEGA # 最大速度
 MAX_SPEED_M = MAX_SPEED / UNIT_MEGA
 CLEAR_OLD = true # 是否刪除舊資料
 MAX_NOTIFICATION_INTERVAL = 0.1
@@ -141,6 +141,10 @@ when /flowbase/
   UPSTREAM_SWITCH = {
   }
   STARTING_ORDER = ["s1-eth1","s1-eth5"]
+  RECEIVER_HOSTS = {
+    HOST[1] => [HOST[2],HOST[3]],
+    HOST[5] => [HOST[4]]
+  }
 
   # Simplest Topo
 when /switchspeed1/
@@ -201,6 +205,10 @@ when /linearTopoK4N2-multi/i
     "s3-eth3" => ["s4-eth3"]
   }
   STARTING_ORDER = ["s2-eth1","s3-eth3","s4-eth3","s2-eth2","s1-eth3"]
+  RECEIVER_HOSTS = {
+    HOST[2] => [HOST[3],HOST[4],HOST[7],HOST[8]],
+    HOST[6] => [HOST[1],HOST[5]]
+  }
 
 when /linearTopoK4N2-single/i
 
@@ -247,9 +255,9 @@ when /linearTopoK4N2-single/i
     # Backward
   }
   
-  RECEIVER_HOSTS = [
-    HOST[1]
-  ]
+  RECEIVER_HOSTS = {
+    HOST[1] => [HOST[2],HOST[3],HOST[4],HOST[5],HOST[6],HOST[7],HOST[8]]
+  }
 
   
   ## STARTING ORDER 
@@ -283,13 +291,22 @@ when /linearTopoK4N2-single/i
 
 end
 
-# Compute host upstream 
+# Compute host upstream  switch
 HOST_UPSTREAM_SWITCH = {}
 if defined? UPSTREAM_INFO
   UPSTREAM_INFO.each do |sw,host_array|
     host_array.each do |host|
       HOST_UPSTREAM_SWITCH[host] ||= []
       HOST_UPSTREAM_SWITCH[host] << sw
+    end
+  end
+end
+# Compute host upstream host 
+HOST_UPSTREAM_HOST = {}
+if defined? RECEIVER_HOSTS
+  RECEIVER_HOSTS.each do |recv,hosts|
+    hosts.each do |host|
+      HOST_UPSTREAM_HOST[host] = recv
     end
   end
 end
