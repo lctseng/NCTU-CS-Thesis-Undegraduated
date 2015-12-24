@@ -23,6 +23,7 @@ class TokenManager
     if req[:is_request] && req[:type] == "control register"
       name = req[:name]
       holder_list = req[:extra]
+      puts "Register New Holder: #{name}"
       new_hold = TokenHolder.new(self,sock,name,holder_list)  
       @overall_holder_lock.synchronize do
         @token_holders[name] = new_hold
@@ -88,11 +89,28 @@ class TokenManager
       end
       @holder_map[target] = holders
     end
+    puts "===========New Holder Map=============="
+    @holder_map.each do |key,arr|
+      puts "Map for #{key}"
+      arr.each do |hold|
+        puts ">> #{hold.name}"
+      end
+    end
   end
 
   # from sender id, get list of holders
   def get_holders(id)
     @holder_map[id]
+  end
+
+  def restore_token(id,n)
+    puts "RESTORE: #{id} : #{n}"
+    @overall_holder_lock.synchronize do
+      holders = get_holders(id)
+      holders.each do |holder|
+        holder.add_token(n)
+      end
+    end
   end
 
   def require_token(id,min,max)

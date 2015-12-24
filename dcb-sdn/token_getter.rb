@@ -62,7 +62,8 @@ class TokenGetter
   def add_requirement(min,max)
     @getter_lock.synchronize do
       @min += min
-      @max = [@max,max].max
+      #@req_time = Time.now
+      @max = [@max,max,@min].max
       @req_ready.signal
     end
   end

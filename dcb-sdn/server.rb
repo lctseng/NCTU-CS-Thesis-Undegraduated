@@ -137,7 +137,7 @@ else
 
           rx_loss = $pkt_buf.total_rx_loss[port]
           if cur_rx > 0
-            rx_loss_rate = rx_loss * PACKET_SIZE * 100.0 / cur_rx
+            rx_loss_rate = rx_loss * PACKET_SIZE * 100.0 / (cur_rx + rx_loss * PACKET_SIZE)
           else
             rx_loss_rate = 0.0
           end

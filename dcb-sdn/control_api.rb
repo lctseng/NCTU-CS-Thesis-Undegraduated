@@ -39,9 +39,19 @@ class ControlAPI
   end
 
   def add_token(n)
-    @controller.puts "ADD_TOKEN #{Time.now.to_f} #{n}"
+    str = "ADD_TOKEN #{Time.now.to_f} #{n}"
+    pad = ' '*(100-str.size)
+    @controller.send(str + pad,0)
     return true
   end
+  
+  def restore_token(handler,n)
+    str = "RESTORE_TOKEN #{Time.now.to_f} #{handler.id} #{n}"
+    pad = ' '*(100-str.size)
+    @controller.send(str + pad,0)
+  end
+
+  
 
   def register_handler(handler)
     @handlers[handler.id] = handler
@@ -49,18 +59,29 @@ class ControlAPI
   end
 
   def get_token(handler,min,max)
-    #puts "#{handler.id} Requiring token :#{min},#{max}"
+    puts "#{handler.id} Requiring token :#{min},#{max}"
     # send message 
-    @controller.puts "GET_TOKEN #{Time.now.to_f} #{handler.id} #{min} #{max}"
+    str =  "GET_TOKEN #{Time.now.to_f} #{handler.id} #{min} #{max}"
+    pad = ' '*(100-str.size)
+    @controller.send(str + pad,0)
     # sleep on cond var.
     handler.token_ready.wait(handler.token_lock)
+  end
+
+
+  def close
+    @controller.close
   end
 
   # Loop-related routine (active)
   def run_main_loop
     loop do
       # receive GIVE_TOKEN from controller
-      str = @controller.recv(100)
+      begin
+        str = @controller.recv(100)
+      rescue
+        break
+      end
       data = str.split
       cmd = data[0]
       time = data[1].to_f
@@ -69,7 +90,7 @@ class ControlAPI
         # GIVE_TOKEN TIME ID VALUE
         id = data[2]
         value = data[3].to_i
-        #puts "#{id} Token #{value} Got, delay = #{sprintf("%7.3f",(Time.now.to_f - time.to_f)*1000)}ms"
+        #puts "#{id} Token #{value} Got, delay = #{sprintf("%7.3f",(Time.now.to_f - @req_time.to_f)*1000)}ms"
         @handlers[id].give_token(value,time)
       end
     end

@@ -7,6 +7,7 @@ require 'qos-lib'
 require 'token_getter'
 require 'thread'
 
+$DEBUG = true
 
 # Hold a token to specific switch or receiver
 class TokenHolder
@@ -37,7 +38,7 @@ class TokenHolder
   end
 
   def close_holder
-    # puts "Holder #{@name} closed"
+    puts "Holder #{@name} closed"
     # Stop Getters
     @getters.each_value do |getter|
       getter.stop
@@ -50,7 +51,7 @@ class TokenHolder
     @thr_receive = Thread.new do
       loop do
         str = @sock.recv(100)
-        if !str
+        if str.empty?
           close_holder
           break
         else
@@ -64,6 +65,9 @@ class TokenHolder
           when "GET_TOKEN"
             # GET_TOKEN TIME ID MIN MAX
             get_token(data[2],data[3].to_i,data[4].to_i) 
+          when "RESTORE_TOKEN"
+            # RESTORE_TOKEN TIME ID VALUE
+            restore_token(data[2],data[3].to_i)
           end
         end
       end
@@ -82,6 +86,11 @@ class TokenHolder
     end
   end
   
+  def restore_token(id,n)
+    self.token_mgmt.restore_token(id,n)
+  end
+
+
   def get_token(id,min,max)
     getter = @getters[id]
     if getter
@@ -92,7 +101,12 @@ class TokenHolder
   end
 
   def give_token(id,n)
-    @sock.puts "GIVE_TOKEN #{Time.now.to_f} #{id} #{n}"
+    #if @req_time
+    #  printf("Delay: %7.4f\n",(Time.now.to_f - @req_time)*1000)
+    #end
+    str =  "GIVE_TOKEN #{Time.now.to_f} #{id} #{n}"
+    pad = ' '*(100-str.size)
+    @sock.send(str + pad,0)
   end
 
 

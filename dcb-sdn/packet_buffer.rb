@@ -213,6 +213,7 @@ class PacketBuffer
     @total_tx[port] += size
     size
   end
+  
   def write_packet_raw(port,str,*peer)
     size = @peers[port].send(str,0,*peer)
     @total_tx[port] += size
@@ -239,11 +240,7 @@ class PacketBuffer
       end
     end
     add_free_token(get_size_a[0])
-    if !@active
-      #puts "Free Token: #{@free_token}"
-    end
     @total_rx[port] += PACKET_SIZE * block_data.size
-    #puts "Remain:#{DCB_SERVER_BUFFER_PKT_SIZE - @available}"
     stop_go_check
     block_data
   end
@@ -252,7 +249,6 @@ class PacketBuffer
     @token_lock.synchronize do
       @free_token += token
     end
-
   end
 
 end

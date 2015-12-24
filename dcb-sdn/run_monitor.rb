@@ -29,7 +29,7 @@ switches.each do |port|
       $stdout.reopen pipe[1]
       Process.exec "./monitor-mn.rb #{sw} #{eth}"
     end
-    sleep 0.25
+    sleep 0.1
   end
 end
 # Read from all 

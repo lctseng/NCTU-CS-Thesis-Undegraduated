@@ -73,17 +73,16 @@ end
 begin
   sleep
 rescue SystemExit, Interrupt
-  exit # FIXME
   puts "\n關閉連線中..."
   $peer.cleanup
   puts "關閉Packet Handler..."
   $thr_port.join
-  $signal_recv.cleanup
-  puts "關閉Signal Receiver..."
-  $thr_recv.join
   $pkt_buf.end_receive
   puts "關閉Packet Buffer..."
   $thr_read.exit
+  puts "關閉Control API..."
+  $control_api.close
+  $thr_control.join
   puts "client結束"
   exit
 end

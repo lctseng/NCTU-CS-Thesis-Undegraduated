@@ -86,6 +86,11 @@ def pack_command(req)
   return info + pad
 end
 
+def req_to_reply(req)
+  req[:is_request] = false
+  req[:is_reply] = true
+end
+
 
 def get_switch_priority(sw_id)
   return 9999 if sw_id.nil?

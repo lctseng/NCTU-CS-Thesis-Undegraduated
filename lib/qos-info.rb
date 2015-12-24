@@ -40,6 +40,7 @@ CTRL_SW_SPEED_LIMIT_ADJUST = 1.0 # 1.0 = precise
 
 # Server
 SERVER_RANDOM_FIXED_SEED = true
+SERVER_LOSS_RATE = 0.0
 
 # Client端設置
 CLIENT_RANDOM_MODE = :pattern
@@ -55,7 +56,7 @@ CLI_SEND_DETECT_INTERVAL = CLI_SEND_INTERVAL / 10.0
 CLI_WAIT_FOR_ACK = !DEBUG_TIMING
 CLI_ACK_SLICE = 256 * UNIT_KILO
 CLI_ACK_SLICE_PKT = (CLI_ACK_SLICE.to_f / PACKET_SIZE).ceil
-
+CLIENT_LOSS_RATE = 0.0
 
 # LOG 設置
 HOST_LOG_NAME_FORMAT = "log/host_speed_%s.log"
@@ -82,9 +83,10 @@ DCB_SDN_CTRL_PORT = 10100
 DCB_SDN_MAX_TOKEN = 4500
 DCB_SDN_MAX_SWITCH_QUEUE_LENGTH = 925
 
-DCB_RECEIVER_FEEDBACK_THRESHOLD =  100#DCB_SDN_EXTRA_TOKEN_USED + CLI_ACK_SLICE_PKT 
+DCB_RECEIVER_FEEDBACK_THRESHOLD =  50#DCB_SDN_EXTRA_TOKEN_USED + CLI_ACK_SLICE_PKT 
 DCB_SWITCH_FEEDBACK_THRESHOLD =  50
 
+DCB_SDN_MAX_TOKEN_REQ = 300
 
 PASSIVE_PORT_TO_IP = {
   5001 => '172.16.0.1',
@@ -199,11 +201,30 @@ when /linearTopoK2N2/i
   STARTING_ORDER = ["s1-eth1","s2-eth3"]
   # linear k = 4 ,n = 2
 when /linearTopoK4N2-multi/i
+  # Forward
   add_qos_info('s1','3',[1,2])
   add_qos_info('s2','1',[4])
   add_qos_info('s2','2',[3])
   add_qos_info('s3','3',[1,2,4])
   add_qos_info('s4','3',[1,2])
+  # Backward
+  # Lower
+  # s1 
+  add_qos_info('s1','2',[3],5005..5005)
+  add_qos_info('s1','1',[3],5001..5001)
+  # s2 
+  add_qos_info('s2','3',[2],[5001,5005])
+  # Upper
+  # s2
+  add_qos_info('s2','4',[1],[5003,5004,5007,5008])
+  # s3 
+  add_qos_info('s3','1',[3],5003..5003)
+  add_qos_info('s3','2',[3],5007..5007)
+  add_qos_info('s3','4',[3],[5004,5008])
+  # s4
+  add_qos_info('s4','1',[3],5004..5004)
+  add_qos_info('s4','2',[3],5008..5008)
+
   UPSTREAM_INFO = {
     "s1-eth3" => [HOST[1],HOST[5]],
     "s2-eth1" => [HOST[3],HOST[4],HOST[7],HOST[8]],
@@ -217,7 +238,9 @@ when /linearTopoK4N2-multi/i
     "s2-eth2" => ["s1-eth3"],
     "s3-eth3" => ["s4-eth3"]
   }
-  STARTING_ORDER = ["s2-eth1","s3-eth3","s4-eth3","s2-eth2","s1-eth3"]
+  STARTING_ORDER = ["s2-eth1","s3-eth3","s4-eth3","s2-eth2","s1-eth3",
+                    "s1-eth2","s1-eth1","s2-eth3",
+                    "s4-eth1","s4-eth2","s3-eth4","s3-eth1","s3-eth2","s2-eth4"]
   RECEIVER_HOSTS = {
     HOST[2] => [HOST[3],HOST[4],HOST[7],HOST[8]],
     HOST[6] => [HOST[1],HOST[5]]
