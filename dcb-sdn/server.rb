@@ -118,45 +118,56 @@ else
   last_time = Time.at(0)
   texts = []
   total_rx_diff = 0
+  total_tx_diff = 0
   begin
     loop do
       if Time.now - last_time > 1
         total_rx_diff = 0
+        total_tx_diff = 0
         texts = []
         last_time = Time.now
         (SERVER_OPEN_PORT_RANGE).each do |port|
+          # RX
           cur_rx = $pkt_buf.total_rx[port]
           rx_diff = cur_rx - last_rx_size[port]
           total_rx_diff += rx_diff
           last_rx_size[port] = cur_rx
-  
-
-          cur_tx = $pkt_buf.total_tx[port]
-          tx_diff = cur_tx - last_tx_size[port]
-          last_tx_size[port] = cur_tx
-
           rx_loss = $pkt_buf.total_rx_loss[port]
           if cur_rx > 0
             rx_loss_rate = rx_loss * PACKET_SIZE * 100.0 / (cur_rx + rx_loss * PACKET_SIZE)
           else
             rx_loss_rate = 0.0
           end
+  
+          # TX
+          cur_tx = $pkt_buf.total_tx[port]
+          tx_diff = cur_tx - last_tx_size[port]
+          total_tx_diff += tx_diff
+          last_tx_size[port] = cur_tx
+          tx_loss = $pkt_buf.total_tx_loss[port]
+          if cur_tx > 0
+            tx_loss_rate = tx_loss * PACKET_SIZE * 100.0 / (cur_tx + tx_loss * PACKET_SIZE)
+          else
+            tx_loss_rate = 0.0
+          end
 
           text = "#{port}:"
           text += sprintf("[RX]總:%11.3f Mbit，",cur_rx * 8.0 / UNIT_MEGA)
-          text += "區:#{(sprintf("%8.3f",rx_diff * 8.0 / UNIT_MEGA))} Mbit，遺失:#{sprintf("%6dp (%6.4f%%)",rx_loss,rx_loss_rate)} "
+          text += "區:#{(sprintf("%8.3f",rx_diff * 8.0 / UNIT_MEGA))} Mbit，遺失:#{sprintf(" %8.4f%%",rx_loss_rate)} "
           text += sprintf("[TX]總:%11.3f Mbit，",cur_tx * 8.0 / UNIT_MEGA)
-          text += "區:#{(sprintf("%8.3f",tx_diff * 8.0 / UNIT_MEGA))} Mbit，遺失:#{sprintf('%6d',$pkt_buf.total_tx_loss[port])}p "
+          text += "區:#{(sprintf("%8.3f",tx_diff * 8.0 / UNIT_MEGA))} Mbit，遺失:#{sprintf(" %8.4f%%",tx_loss_rate)} "
           texts << text
         end
       end
       current_q = DCB_SERVER_BUFFER_PKT_SIZE - $pkt_buf.available
       q_rate = (current_q * 100.0)/DCB_SERVER_BUFFER_PKT_SIZE
-      printf("===Spd: %8.3f Mbit; Q: %5d(%5.2f%%) :#{'|'*(0.4*q_rate).ceil}\n",total_rx_diff * 8.0 / UNIT_MEGA,current_q,q_rate)
+      printf("===Spd:[RX] %8.3f Mbit [TX] %8.3f Mbit ; Q: %5d(%5.2f%%) :#{'|'*(0.25*q_rate).ceil}\n",total_rx_diff * 8.0 / UNIT_MEGA,total_tx_diff * 8.0 / UNIT_MEGA,current_q,q_rate)
+      final = ''
       texts.each do |text|
-        print text+"\n"
+        final += text+"\n"
       end
-      sleep 0.1
+      print final
+      sleep 0.2
     end
   rescue SystemExit, Interrupt
     puts "server結束"

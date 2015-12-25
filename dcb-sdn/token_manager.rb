@@ -89,7 +89,10 @@ class TokenManager
       end
       @holder_map[target] = holders
     end
-    puts "===========New Holder Map=============="
+  end
+
+  def inspect_holder_path
+    puts "===========Holder Map=============="
     @holder_map.each do |key,arr|
       puts "Map for #{key}"
       arr.each do |hold|

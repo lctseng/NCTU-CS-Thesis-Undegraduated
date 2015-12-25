@@ -59,7 +59,7 @@ class ControlAPI
   end
 
   def get_token(handler,min,max)
-    puts "#{handler.id} Requiring token :#{min},#{max}"
+    puts "#{handler.id} Requiring token :#{min},#{max}" if handler.is_a?(ActivePacketHandler)
     # send message 
     str =  "GET_TOKEN #{Time.now.to_f} #{handler.id} #{min} #{max}"
     pad = ' '*(100-str.size)

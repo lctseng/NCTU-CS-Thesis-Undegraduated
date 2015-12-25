@@ -10,14 +10,14 @@ require 'packet_buffer'
 require 'packet_handler'
 require 'control_api' 
 
-if CLIENT_RANDOM_FIXED_SEED
-  srand(0)
-end
 
 $host = ARGV[1]
 $port = ARGV[2].to_i
 $host_ip = ARGV[3]
 $size = ARGV[4].to_i
+if CLIENT_RANDOM_FIXED_SEED
+  srand($port)
+end
 if !$host_ip
   puts "Must specify client IP"
   puts "Usage: client [mode] [target_ip] [target_port] [client_ip] [size]"
@@ -66,7 +66,7 @@ $peer = ActivePacketHandler.new($pkt_buf,$host,$port,$size)
 $control_api.register_handler($peer)
 
 $thr_port = Thread.new do
-  $peer.run_loop
+  $peer.run_loop(rand >= 0.5 ? "read" : "write")
 end
 
 
