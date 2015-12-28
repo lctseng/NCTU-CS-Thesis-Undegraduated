@@ -11,6 +11,21 @@ class PacketHandler
   attr_reader :token_lock
   attr_reader :token_ready
 
+  def initialize(pkt_buf,peer_ip,port)
+    @pkt_buf = pkt_buf
+    @peer_ip = peer_ip
+    @port = port
+    @id = "#{peer_ip}:#{port}"
+    connection_data_reset
+    @lock_file = File.open("lock_file/#{@pkt_buf.my_addr}.lock","w")
+    @stop = false
+    
+    @token = 0
+    @token_lock = Mutex.new
+    @token_ready = ConditionVariable.new
+
+  end
+  
   def give_token(n,time)
     @token_lock.synchronize do
       @token += n
@@ -41,21 +56,6 @@ class PacketHandler
     @token_getter.restore_token(self,n)
   end
 
-  #
-  def initialize(pkt_buf,peer_ip,port)
-    @pkt_buf = pkt_buf
-    @peer_ip = peer_ip
-    @port = port
-    @id = "#{peer_ip}:#{port}"
-    connection_data_reset
-    @lock_file = File.open("lock_file/#{@pkt_buf.my_addr}.lock","w")
-    @stop = false
-    
-    @token = 0
-    @token_lock = Mutex.new
-    @token_ready = ConditionVariable.new
-
-  end
 
   def connection_data_reset
     @block_buf = []
@@ -72,21 +72,7 @@ class PacketHandler
   end
 
   def run_loop
-    n = 0
-    loop do
-      n+= 1
-      #puts n
-      #execute_buffer
-      pkt = extract_next_packet
-      if pkt
-        process_packet(pkt)
-        if @stop
-          break
-        end
-      elsif !@wait_for_packet
-        execute_next_action
-      end
-    end
+    raise RuntimeError,"No loop defined"
   end
 
   def execute_buffer
@@ -112,81 +98,6 @@ class PacketHandler
       return @block_buf.shift
     else
       return nil
-    end
-  end
-
-  def execute_next_action
-    return nil
-  end
-
-  def process_data_packet(pkt)
-    task_n = pkt[:req][:task_no]
-    if task_n != @task_cnt
-      #puts "錯誤的大編號：#{task_n}，預期：#{@task_cnt}"
-      CLI_ACK_SLICE_PKT.times do |i|
-        @recv_buff[i] = false
-      end
-      loss = (CLI_ACK_SLICE_PKT - @recv_count  + CLI_ACK_SLICE_PKT * (task_n - @task_cnt - 1))
-      @pkt_buf.total_rx_loss[@port] += loss
-      @pkt_buf.add_free_token(loss)
-      @recv_count = 0
-      @task_cnt = task_n
-      @lock_file.flock(File::LOCK_UN)
-    end
-    sub_n = pkt[:req][:sub_no][0]
-    #print "收到編號：#{sub_n}，"
-    if @recv_buff[sub_n]
-      # exist
-      #puts "重複封包：#{sub_n}"
-    else
-      # not exist
-      #puts "正確編號：#{sub_n}"
-      @recv_buff[sub_n] = true
-      @recv_count += 1
-
-      if sub_n == 0
-        @lock_file.flock(File::LOCK_EX)
-      end
-      # full?
-      if @recv_count == CLI_ACK_SLICE_PKT
-        # full
-        CLI_ACK_SLICE_PKT.times do |i|
-          @recv_buff[i] = false
-        end
-        @recv_count = 0
-        # IO 
-        sleep get_disk_io_time
-        @lock_file.flock(File::LOCK_UN)
-        if DCB_CEHCK_MAJOR_NUMBER
-          @task_cnt += 1
-        end
-      else
-        # not full
-      end
-    end
-  end
-
-  def process_ack_request(pkt)
-    #puts "處理ACK request，給：#{pkt[:peer]}"
-    req = pkt[:req]
-    req[:is_request] = false
-    req[:is_reply] = true
-    @lock_file.flock(File::LOCK_UN)
-    #$pkt_buf.disk_lock.synchronize do
-      #sleep 1
-    #end
-    write_packet_req(req,*(pkt[:peer]))
-  end
-
-  def process_packet(pkt)
-    #puts pkt[:msg]
-    case pkt[:req][:type]
-    when "data send"
-      process_data_packet(pkt)
-    when "data ack"
-      process_ack_request(pkt)
-    when "end connection"
-      end_connection
     end
   end
 
@@ -553,6 +464,7 @@ class ActivePacketHandler < PacketHandler
         ack_cnt -= 1
       end
       ensure_token(1,ack_cnt)
+      #ensure_token(1,ack_cnt)
       @token -= 1
       #puts "Reply ACK：#{data_ack_req}"
       write_packet_req(data_ack_req)
