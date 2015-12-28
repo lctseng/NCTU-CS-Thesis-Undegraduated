@@ -10,6 +10,8 @@ require 'packet_buffer'
 require 'packet_handler'
 require 'control_api'
 
+STATISTIC_INTERVAL = 0.2
+
 
 SERVER_OPEN_PORT_RANGE = 5001..5008
 #SERVER_OPEN_PORT_RANGE = 5005..5005
@@ -121,7 +123,7 @@ else
   total_tx_diff = 0
   begin
     loop do
-      if Time.now - last_time > 1
+      if Time.now - last_time > STATISTIC_INTERVAL
         total_rx_diff = 0
         total_tx_diff = 0
         texts = []
@@ -153,21 +155,21 @@ else
 
           text = "#{port}:"
           text += sprintf("[RX]總:%11.3f Mbit，",cur_rx * 8.0 / UNIT_MEGA)
-          text += "區:#{(sprintf("%8.3f",rx_diff * 8.0 / UNIT_MEGA))} Mbit，遺失:#{sprintf(" %8.4f%%",rx_loss_rate)} "
+          text += "區:#{(sprintf("%8.3f",rx_diff * 8.0 / UNIT_MEGA / STATISTIC_INTERVAL))} Mbit，遺失:#{sprintf(" %8.4f%%",rx_loss_rate)} "
           text += sprintf("[TX]總:%11.3f Mbit，",cur_tx * 8.0 / UNIT_MEGA)
-          text += "區:#{(sprintf("%8.3f",tx_diff * 8.0 / UNIT_MEGA))} Mbit，遺失:#{sprintf(" %8.4f%%",tx_loss_rate)} "
+          text += "區:#{(sprintf("%8.3f",tx_diff * 8.0 / UNIT_MEGA / STATISTIC_INTERVAL))} Mbit，遺失:#{sprintf(" %8.4f%%",tx_loss_rate)} "
           texts << text
         end
       end
       current_q = DCB_SERVER_BUFFER_PKT_SIZE - $pkt_buf.available
       q_rate = (current_q * 100.0)/DCB_SERVER_BUFFER_PKT_SIZE
-      printf("===Spd:[RX] %8.3f Mbit [TX] %8.3f Mbit ; Q: %5d(%5.2f%%) :#{'|'*(0.25*q_rate).ceil}\n",total_rx_diff * 8.0 / UNIT_MEGA,total_tx_diff * 8.0 / UNIT_MEGA,current_q,q_rate)
+      printf("===Spd:[RX] %8.3f Mbit [TX] %8.3f Mbit ; Q: %5d(%5.2f%%) :#{'|'*(0.25*q_rate).ceil}\n",total_rx_diff * 8.0 / UNIT_MEGA / STATISTIC_INTERVAL,total_tx_diff * 8.0 / UNIT_MEGA / STATISTIC_INTERVAL,current_q,q_rate)
       final = ''
       texts.each do |text|
         final += text+"\n"
       end
       print final
-      sleep 0.2
+      sleep [STATISTIC_INTERVAL / 2.0,0.1].max
     end
   rescue SystemExit, Interrupt
     puts "server結束"

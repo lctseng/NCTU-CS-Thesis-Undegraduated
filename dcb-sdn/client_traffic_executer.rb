@@ -14,7 +14,8 @@ require 'control_api'
 $host = ARGV[1]
 $port = ARGV[2].to_i
 $host_ip = ARGV[3]
-$size = ARGV[4].to_i
+$command = ARGV[4]
+$size = ARGV[5].to_i
 if CLIENT_RANDOM_FIXED_SEED
   srand($port)
 end
@@ -66,7 +67,7 @@ $peer = ActivePacketHandler.new($pkt_buf,$host,$port,$size)
 $control_api.register_handler($peer)
 
 $thr_port = Thread.new do
-  $peer.run_loop(rand >= 0.5 ? "read" : "write")
+  $peer.run_loop($command)
 end
 
 
