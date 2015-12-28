@@ -1,5 +1,6 @@
 #!/usr/bin/env ruby 
 require_relative 'config'
+NO_TYPE_REQUIRED = true if !defined? NO_TYPE_REQUIRED
 require 'qos-info'
 
 out_name = ARGV[0]
@@ -20,8 +21,12 @@ def generate_default_pattern(f,pattern_time)
   while pattern_time > 0
     # mice traffic
     if rand < 0.1
-      10.times do
-        f.puts rand(500*2**10)
+      50.times do
+        if rand >= WRITE_RATE
+          f.puts "read #{rand(100*2**10)}"
+        else
+          f.puts "write #{rand(100*2**10)}"
+        end
         if rand < 0.5
           sleep_time = [rand(50)/100.0,pattern_time].min
           pattern_time = write_sleep(f,pattern_time,sleep_time)
@@ -31,21 +36,29 @@ def generate_default_pattern(f,pattern_time)
 
     # short sleep
     if rand < 0.5
-      sleep_time = [rand(100)/100.0,pattern_time].min
+      sleep_time = [rand(100)/500.0,pattern_time].min
       pattern_time = write_sleep(f,pattern_time,sleep_time)
     end
     # long sleep 
     if rand < 0.1
-      sleep_time = [rand(1000)/100.0,pattern_time].min
+      sleep_time = [rand(1000)/500.0,pattern_time].min
       pattern_time = write_sleep(f,pattern_time,sleep_time)
     end
     # small traffic
-    if rand < 0.5
-      f.puts rand(UNIT_MEGA)
+    if rand < 0.8
+      if rand >= WRITE_RATE
+          f.puts "read #{rand(UNIT_MEGA*3)}"
+      else
+          f.puts "write #{rand(UNIT_MEGA*3)}"
+      end
     end
     # burst traffic
     if rand < 0.05
-      f.puts rand(10*UNIT_MEGA) + UNIT_MEGA
+      if rand >= WRITE_RATE
+        f.puts "read #{rand(20*UNIT_MEGA) + 10*UNIT_MEGA}"
+      else
+        f.puts "write #{rand(20*UNIT_MEGA) + 10*UNIT_MEGA}"
+      end
     end
 
   end
@@ -140,9 +153,9 @@ def generate_bursty_pattern(f,pattern_time)
   while pattern_time > 0
     if true
       if rand > 0.5
-        f.puts "write #{rand(15*UNIT_MEGA) + 5*UNIT_MEGA}"
+        f.puts "write #{rand(150*UNIT_MEGA) + 50*UNIT_MEGA}"
       else
-        f.puts "read #{rand(15*UNIT_MEGA) + 5*UNIT_MEGA}"
+        f.puts "read #{rand(150*UNIT_MEGA) + 50*UNIT_MEGA}"
       end
       if rand > 0.5 
         sleep_time = [rand(400)/100.0 + 5,pattern_time].min
@@ -204,10 +217,10 @@ end
 
 def generate_pattern(out_name,pattern_time)
   File.open(sprintf(CLIENT_PATTERN_NAME_FORMAT,out_name),'w') do |f|
-    #generate_default_pattern(f,pattern_time)
+    generate_default_pattern(f,pattern_time)
     #generate_elephant_pattern(f,pattern_time)
     #generate_elephant_long_sleep_pattern(f,pattern_time,{long_time: 10,long_rate: 0.01,large_rate: 0.5,small_rate: 0.9}) 
-    generate_bursty_pattern(f,pattern_time)
+    #generate_bursty_pattern(f,pattern_time)
     #generate_by_patching_files(f,pattern_time)
     #generate_long_flow(f,pattern_time)
   end
