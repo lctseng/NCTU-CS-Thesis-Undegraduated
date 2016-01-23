@@ -95,13 +95,21 @@ RATE_BASED_CTRL_ADDR = "172.16.0.253"
 RATE_BASED_CTRL_PORT = "10200"
 RATE_BASED_CTRL_MSG_LEN = 100
 
-RATE_BASED_SHOW_INTERVAL = 0.1
-RATE_BASED_SWITCH_MONITOR_INTERVAL = 0.1
 
-RATE_BASED_SEND_INTERVAL = 0.01
-RATE_BASED_BASE_SPEED_PKTI = 85
+RATE_BASED_WAIT_FOR_ACK = true
+
+RATE_BASED_SHOW_INTERVAL = 0.1
+RATE_BASED_SWITCH_MONITOR_INTERVAL = 0.01
+
+RATE_BASED_SEND_INTERVAL = 0.005
+RATE_BASED_BASE_SPEED_PKTI = 0.05
+
+RATE_BASED_SWITCH_SCAN_INTERVAL = 0.01
+
+RATE_BASED_ASSIGN_RATE = 0.7
 
 RATE_BASED_SWITCH_INTERVAL_CONVERT_RATE = RATE_BASED_SEND_INTERVAL / RATE_BASED_SWITCH_MONITOR_INTERVAL
+
 
 
 
@@ -410,5 +418,25 @@ if defined? PACKET_SENDERS
       TARGET_HOSTS_ID[sender] = []
     end
     TARGET_HOSTS_ID[sender] << target
+  end
+end
+# packet flow with switch only 
+if defined? PACKET_FLOWS
+  PACKET_FLOWS_SW_ONLY = {}
+  PACKET_FLOWS.each do |key,array|
+    PACKET_FLOWS_SW_ONLY[key] = array[0,array.size-1]
+  end
+end
+# switch port to senders id 
+if defined? PACKET_FLOWS_SW_ONLY
+  SWITCH_PORT_PASSING_HOST = {}
+  PACKET_FLOWS_SW_ONLY.each do |host,sw_list|
+    sw_list.each do |port|
+      if !SWITCH_PORT_PASSING_HOST.has_key? port
+        SWITCH_PORT_PASSING_HOST[port] = [host]
+      else
+        SWITCH_PORT_PASSING_HOST[port] << host
+      end
+    end
   end
 end
