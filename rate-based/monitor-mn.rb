@@ -61,14 +61,14 @@ msg = ControlMessage.switch($port,ControlMessage::SWITCH_REGISTER)
 msg.send($controller_sock,0)
 
 
+show_cnt = 0
 
 last_sent = 0
 # 不斷取得queue len
 begin
-  last_time = Time.now
+  interval = IntervalWait.new
   loop do
     # Timing compute
-    last_time = Time.now
     $q_data = data =  get_queue_len($qid)
     len = data[:len]
     sent_diff = data[:sent] - last_sent
@@ -77,7 +77,9 @@ begin
       puts "在#{Time.now.to_f}發起！" if DEBUG_TIMING
     end
 
-    if len >= 0 
+    show_cnt += 1
+    if show_cnt > 5
+      show_cnt = 0
       # 畫圖
       bar_len = (len / 20.0).ceil
       printf("%5d,速度上限：%3d Mbits, 區間已送出: %4d,Queue:%s\n",len,data[:spd],sent_diff,"|"*bar_len) if MONITOR_SHOW_INFO
@@ -86,9 +88,7 @@ begin
     msg.spd = (sent_diff * RATE_BASED_SWITCH_INTERVAL_CONVERT_RATE).round
     msg.qlen = len
     msg.send($controller_sock,0)
-    
-    sleep MONITOR_INTERVAL
-
+    interval.sleep MONITOR_INTERVAL
   end
 rescue SystemExit, Interrupt
 

@@ -1,3 +1,7 @@
+require_relative 'config'
+NO_TYPE_REQUIRED = true
+require 'qos-lib'
+
 
 class Speed
   include Comparable
@@ -8,11 +12,11 @@ class Speed
   end
 
   def self.pkts(val)
-    new((val*RATE_BASED_SEND_INTERVAL).ceil)
+    new(val*RATE_BASED_SEND_INTERVAL)
   end
 
   def self.mbps(val)
-    pkts = (val * UNIT_MEGA / 8.0 / PACKET_SIZE).ceil
+    pkts = val * UNIT_MEGA / 8.0 / PACKET_SIZE
     self.pkts(pkts)
   end
 
@@ -40,16 +44,16 @@ class Speed
     Speed.new(@data - rhs.data)
   end
 
-  def -
-    Speed.new(@data*-1)
+  def -@
+    Speed.new(@data*-1.0)
   end
 
   def *(n)
-    Speed.new (@data*n).ceil
+    Speed.new @data*n.to_f
   end
 
   def /(n)
-    Speed.new (@data/n).ceil
+    Speed.new @data/n.to_f
   end
 
   def <=>(rhs)
@@ -192,9 +196,9 @@ class ControlMessage
     when HOST_REGISTER,SWITCH_REGISTER
       # do nothing
     when HOST_CHANGE,SWITCH_CHANGE
-      ins.spd = fields[4].to_i
+      ins.spd = fields[4].to_f
     when SWITCH_REPORT
-      ins.spd = fields[4].to_i
+      ins.spd = fields[4].to_f
       ins.qlen = fields[5].to_i
     else
       raise RuntimeError,"Cannot unpack: unknown msg_type"
@@ -245,4 +249,35 @@ class ControlMessage
   
   
 
+end
+# //////////////////////
+# routings 
+# //////////////////////
+#
+#
+def extract_next_req(socket,timeout = nil)
+  ready = IO.select([socket],[],[],timeout)
+  return nil if !ready
+  ready[0].each do |sock|
+    str = sock.recv(PACKET_SIZE)
+    return parse_command(str)
+  end
+end
+#
+def send_and_wait_for_ack(packet_sender,ack_req)
+  str = pack_command(ack_req)
+  packet_sender.send(str,0)
+  loop do
+    # get next
+    req = extract_next_req(packet_sender.target_sock,5)
+    if req && req[:is_reply] && req[:type] == ack_req[:type]
+      #puts "收到ACK reply"
+      return req
+    else
+      # Timedout
+      puts "收到：#{req}"
+      puts "重新傳輸 #{ack_req[:type]} request"
+      packet_sender.send(str,0)
+    end
+  end
 end

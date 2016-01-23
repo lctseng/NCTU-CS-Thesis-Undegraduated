@@ -10,6 +10,16 @@ require 'common'
 require 'sender_process'
 
 
+
+
+
+
+
+
+  
+
+
+
 $host = ARGV[1]
 $port = ARGV[2].to_i
 $host_ip = ARGV[3]
@@ -29,19 +39,88 @@ if $size <= 0
   exit
 end
 
-$sender = SenderProcess.connect($host,$port)
-$id = $sender.id
 
-interval = IntervalWait.new
-delay = Timing.start
-while true
-  $sender.send("1"*PACKET_SIZE,0)
-end
 
-begin
-  sleep
-rescue SystemExit, Interrupt
-  puts "\n關閉連線中..."
-  puts "client結束"
-  exit
+timing = Timing.start
+if $command == "write"
+  # //////////////////////
+  # do sending
+  # //////////////////////
+
+  $sender = SenderProcess.connect($host,$port)
+  $sender_control = Thread.new do
+    $sender.run_control_loop
+  end
+
+  ### 
+  i = 0
+  ack_req = {}
+  ack_req[:is_request] = true
+  ack_req[:type] = "send ack"
+  # Data Req
+  data_req = {}
+  data_req[:is_request] = true
+  data_req[:type] = "send data"
+  # Send Init request
+  init_req = {}
+  init_req[:is_request] = true
+  init_req[:type] = "send init"
+  init_req[:data_size] = $size
+  send_and_wait_for_ack($sender,init_req)
+  # Start Data Packet
+  loop do
+    current_send = 0
+    done = false
+    CLI_ACK_SLICE_PKT.times do |j|
+      data_req[:task_no] = i
+      data_req[:sub_no] = [j]
+      $size -= PACKET_SIZE
+      current_send += PACKET_SIZE
+      if $size <= 0
+        data_req[:extra] = "DONE"
+        done = true
+      else
+        data_req[:extra] = "CONTINUE"
+      end
+      $sender.send(pack_command(data_req),0)
+      if done
+        #puts "pre-DONE"
+        break
+      end
+    end
+    if RATE_BASED_WAIT_FOR_ACK
+      timing.start
+      reply_req = send_and_wait_for_ack($sender,ack_req)
+      #printf "ACK RTT: %9.4f ms\n",timing.end
+      if reply_req[:extra] == "LOSS"
+        $size += current_send
+        done = false
+      else
+        if done
+          $stop = true
+        end
+        i += 1
+      end
+    else
+      if done
+        $stop = true
+      end
+      i += 1
+    end
+    if $stop
+      break
+    end
+  end
+
+
+  ###
+
+  $sender_control.exit
+  $sender.close
+
+
+else
+  # //////////////////////
+  # do receving
+  # //////////////////////
 end

@@ -29,23 +29,30 @@ switches.each do |port|
       $stdout.reopen pipe[1]
       Process.exec "./monitor-mn.rb #{sw} #{eth}"
     end
-    sleep 0.1
+    sleep 0.01
   end
 end
 # Read from all 
 begin
+  last_text = {}
   loop do
     puts "========================"
+    text = []
     pipes.each do |port,pipe|
       begin
         pipe[0].gets
-        puts "#{port}:#{$_}"
+        str = "#{port}:#{$_}"
+        text << str
+        last_text[port] = str
       rescue IO::WaitReadable
-
+        text << last_text[port]
       rescue EOFError
         puts "#{port}已關閉通訊！"
         pipes.delete port
       end
+    end
+    text.each do |str|
+      puts str
     end
   end
 rescue SystemExit, Interrupt
