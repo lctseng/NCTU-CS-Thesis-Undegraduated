@@ -1,4 +1,5 @@
 require_relative 'qos-info'
+require_relative 'io_time'
 
 Thread.abort_on_exception = true
 
@@ -148,8 +149,22 @@ def dcb_get_upstream(type,id)
 end
 
 
-def get_disk_io_time
-  return 0.001
+
+
+def get_disk_io_time(io_type = -1)
+  case io_type
+  when 1 # large file, very small IO time
+    return LARGE_FILE_IO_TIME_DATASET.sample
+  when 2 # small file, randomly IO time
+    return SMALL_FILE_IO_TIME_DATASET.sample
+  else # default
+    return 0.001
+
+
+  end
 end
 
 
+def clear_screen
+  puts "\033[2J\033[1;1H"
+end
