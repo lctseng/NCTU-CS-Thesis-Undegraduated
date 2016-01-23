@@ -16,6 +16,20 @@ def write_sleep(file,pattern_time,sleep_time)
   pattern_time
 end
 
+def generate_test_pattern(f,pattern_time)
+  pattern_time.to_i.times do 
+    if rand >= WRITE_RATE
+      cmd = "read"
+    else
+      cmd = "write"
+    end
+    if rand < 0.01 # large
+      f.puts "#{cmd} #{rand(20*UNIT_MEGA) + 10*UNIT_MEGA} 1"
+    else # small
+      f.puts "#{cmd} #{rand(2*UNIT_MEGA) + 1*UNIT_MEGA} 2"
+    end
+  end
+end
 
 def generate_default_pattern(f,pattern_time)
   while pattern_time > 0
@@ -217,7 +231,8 @@ end
 
 def generate_pattern(out_name,pattern_time)
   File.open(sprintf(CLIENT_PATTERN_NAME_FORMAT,out_name),'w') do |f|
-    generate_default_pattern(f,pattern_time)
+    generate_test_pattern(f,pattern_time)
+    #generate_default_pattern(f,pattern_time)
     #generate_elephant_pattern(f,pattern_time)
     #generate_elephant_long_sleep_pattern(f,pattern_time,{long_time: 10,long_rate: 0.01,large_rate: 0.5,small_rate: 0.9}) 
     #generate_bursty_pattern(f,pattern_time)

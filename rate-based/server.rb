@@ -8,8 +8,12 @@ require 'qos-lib'
 require 'common'
 require 'sender_process'
 
-STATISTIC_INTERVAL = 0.5
-
+STATISTIC_INTERVAL = 0.2
+IO_TYPE_NAME = {
+  nil => " ",
+  1 => "L",
+  2 => "S",
+}
 
 SERVER_OPEN_PORT_RANGE = 5001..5008
 #SERVER_OPEN_PORT_RANGE = 5005..5005
@@ -29,9 +33,9 @@ end
 
 
 def run_recv_loop(pkt_handler,ack_req)
-  # IO type
-  io_type = ack_req[:extra].to_i
   port = pkt_handler.dst_port 
+  # IO type
+  $io_types[port] = io_type = ack_req[:extra].to_i
   # Compute loop number
   ack_cnt = (ack_req[:data_size].to_f / CLI_ACK_SLICE ).ceil
   # Reply Ack
@@ -206,7 +210,7 @@ else
   $total_tx_loss = {}
   $total_rx = {}
   $total_rx_loss = {}
-
+  $io_types = {}
   # ///////////
   # per-port loop
   # ///////////
@@ -263,7 +267,7 @@ else
           tx_loss_rate = 0.0
         end
 
-        text = "#{port}:"
+        text = "#{port}:#{IO_TYPE_NAME[$io_types[port]]}:"
         text += sprintf("[RX]總:%11.3f Mbit，",cur_rx * 8.0 / UNIT_MEGA)
         text += "區:#{(sprintf("%8.3f",rx_diff * 8.0 / UNIT_MEGA / STATISTIC_INTERVAL))} Mbit，遺失:#{sprintf(" %8.4f%%",rx_loss_rate)} "
         text += sprintf("[TX]總:%11.3f Mbit，",cur_tx * 8.0 / UNIT_MEGA)

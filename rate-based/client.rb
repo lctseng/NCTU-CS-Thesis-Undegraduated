@@ -11,7 +11,6 @@ $host_ip = ARGV[3]
 File.open("pattern/client_#{$port}.pattern") do |f|
   while line = f.gets
     data = line.split
-    data[2] = 2
     case data[0] # command
     when "read","write"
       puts line

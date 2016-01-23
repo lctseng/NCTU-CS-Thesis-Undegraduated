@@ -254,7 +254,6 @@ $thr_sw_scan = Thread.new do
     host_change = {}
     $switches_id_list.each do |sw_id|
       sw_info = $switches_by_id[sw_id]
-      hosts = SWITCH_PORT_PASSING_HOST[sw_id] & $senders_id_list
       bias = false # whether to divide speed equally
       # Speed for queue
       if sw_info.qlen < 50 #&& (sw_info.spd_limit - sw_info.spd_assigned).pkti > 0.5
@@ -277,19 +276,22 @@ $thr_sw_scan = Thread.new do
         #puts "Limit Diff: #{diff_spd.mbps}"
         #puts "Limit change: #{change_spd.mbps}"
       end
-      if bias
-        total_speed = hosts.inject(0) {|r,host_id| r += $senders_by_id[host_id].spd.pkti}
-      else
-        divided_change_spd = change_spd / hosts.size
-      end
-      hosts.each do |host_id|
+      $senders_id_lock.synchronize do
+        hosts = SWITCH_PORT_PASSING_HOST[sw_id] & $senders_id_list
         if bias
-          host_change_spd = change_spd * ($senders_by_id[host_id].spd.pkti / total_speed)
+          total_speed = hosts.inject(0) {|r,host_id| r += $senders_by_id[host_id].spd.pkti}
         else
-          host_change_spd = divided_change_spd 
+          divided_change_spd = change_spd / hosts.size
         end
-        if !host_change.has_key?(host_id) || host_change[host_id] > host_change_spd
-          host_change[host_id] = host_change_spd
+        hosts.each do |host_id|
+          if bias
+            host_change_spd = change_spd * ($senders_by_id[host_id].spd.pkti / total_speed)
+          else
+            host_change_spd = divided_change_spd 
+          end
+          if !host_change.has_key?(host_id) || host_change[host_id] > host_change_spd
+            host_change[host_id] = host_change_spd
+          end
         end
       end
     end # end each switch
