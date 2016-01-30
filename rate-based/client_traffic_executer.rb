@@ -67,18 +67,20 @@ if $command == "write"
   data_req = {}
   data_req[:is_request] = true
   data_req[:type] = "send data"
+  sub_size = get_sub_size($io_type)
   # Send Init request
   init_req = {}
   init_req[:is_request] = true
   init_req[:type] = "send init"
   init_req[:data_size] = $size
+  init_req[:sub_size] = sub_size
   init_req[:extra] = $io_type
   send_and_wait_for_ack($sender,init_req)
   # Start Data Packet
   loop do
     current_send = 0
     done = false
-    CLI_ACK_SLICE_PKT.times do |j|
+    sub_size.times do |j|
       data_req[:task_no] = i
       data_req[:sub_no] = [j]
       $size -= PACKET_SIZE
@@ -95,7 +97,10 @@ if $command == "write"
         break
       end
     end
+    # Update sub size
+    sub_size = get_sub_size($io_type)
     if RATE_BASED_WAIT_FOR_ACK
+      ack_req[:sub_size] = sub_size
       timing.start
       reply_req = send_and_wait_for_ack($sender,ack_req)
       #printf "ACK RTT: %9.4f ms\n",timing.end

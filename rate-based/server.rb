@@ -13,6 +13,7 @@ IO_TYPE_NAME = {
   nil => " ",
   1 => "L",
   2 => "S",
+  3 => "N",
 }
 
 SERVER_OPEN_PORT_RANGE = 5001..5008
@@ -38,6 +39,8 @@ def run_recv_loop(pkt_handler,ack_req)
   $io_types[port] = io_type = ack_req[:extra].to_i
   # Compute loop number
   ack_cnt = (ack_req[:data_size].to_f / CLI_ACK_SLICE ).ceil
+  # Sub size 
+  sub_size = ack_req[:sub_size]
   # Reply Ack
   req_to_reply(ack_req)
   sz = pkt_handler.send(pack_command(ack_req),0)
@@ -55,10 +58,13 @@ def run_recv_loop(pkt_handler,ack_req)
     current_read = 0
 
     # Sub data buffer
-    sub_buf = [false] * CLI_ACK_SLICE_PKT
-
-    while sub_n < CLI_ACK_SLICE_PKT
+    sub_buf = [false] * sub_size
+    #loss = rand > 0.9
+    while sub_n < sub_size
       data_req = parse_command(pkt_handler.recv(PACKET_SIZE))
+      #if loss && sub_n == CLI_ACK_SLICE_PKT - 1
+      #  break # Read but do nothing # TODO: LOSSING TEST  
+      #end
       current_read += PACKET_SIZE
       if data_req[:type] != "send data"
         if data_req[:type] == "send ack"
@@ -95,6 +101,7 @@ def run_recv_loop(pkt_handler,ack_req)
         done = false
       end
     end
+    #puts "Done with sub_n = #{sub_n} , sz = #{sub_buf.size}"
     # 檢查sub buf 
     if sub_buf.all? {|v| v } && ( SERVER_LOSS_RATE == 0.0 || rand > SERVER_LOSS_RATE )
       # 全都有
@@ -124,6 +131,8 @@ def run_recv_loop(pkt_handler,ack_req)
         $total_rx[port] += PACKET_SIZE
       end
       current_read -= PACKET_SIZE
+      # Update sub size
+      sub_size = data_ack_req[:sub_size]
       # send ack back
       req_to_reply(data_ack_req)
       if loss

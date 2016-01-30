@@ -1,5 +1,6 @@
 require_relative 'qos-info'
 require_relative 'io_time'
+require_relative 'sub_size'
 
 Thread.abort_on_exception = true
 
@@ -43,7 +44,7 @@ def parse_command(str)
       $output.puts "封包大小錯誤！"
   end
   req = {}
-  valid,main_type,type,task,sub,data_size,name,extra,pad = str.split(';')
+  valid,main_type,type,task,sub,data_size,sub_size,name,extra,pad = str.split(';')
   if valid != PKACKET_VALIDATOR
       $output.puts "封包內容錯誤！"
   end
@@ -58,6 +59,7 @@ def parse_command(str)
   req[:task_no] = task.to_i
   req[:sub_no] = sub.split(',').collect{|s| s.to_i}
   req[:data_size] = data_size.to_i
+  req[:sub_size] = sub_size.to_i
   req[:name] = name
   req[:extra] = extra
   req
@@ -77,12 +79,13 @@ def pack_command(req)
   req.ensure_key(:task_no,0)
   req.ensure_key(:sub_no,[0])
   req.ensure_key(:data_size,0)
+  req.ensure_key(:sub_size,0)
   req.ensure_key(:name,"")
   req.ensure_key(:extra,"")
   # convert
   main_type = req[:is_request] ? "request" : "reply"
   sub_no = req[:sub_no].join(',')
-  info = "#{PKACKET_VALIDATOR};#{main_type};#{req[:type]};#{req[:task_no]};#{sub_no};#{req[:data_size]};#{req[:name]};#{req[:extra]};"
+  info = "#{PKACKET_VALIDATOR};#{main_type};#{req[:type]};#{req[:task_no]};#{sub_no};#{req[:data_size]};#{req[:sub_size]};#{req[:name]};#{req[:extra]};"
   pad = '1' * (PACKET_SIZE - info.size)
   return info + pad
 end
@@ -161,6 +164,16 @@ def get_disk_io_time(io_type = -1)
     return 0.001
 
 
+  end
+end
+def get_sub_size(io_type = -1)
+  case io_type
+  when 1
+    return CLI_ACK_SLICE_PKT
+  when 2
+    return SMALL_FILE_SUB_SIZE_DATASET.sample 
+  else
+    return CLI_ACK_SLICE_PKT 
   end
 end
 
