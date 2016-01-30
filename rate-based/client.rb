@@ -11,11 +11,12 @@ $host_ip = ARGV[3]
 File.open("pattern/client_#{$port}.pattern") do |f|
   while line = f.gets
     data = line.split
+    size = (data[1].to_f/PACKET_SIZE).ceil * PACKET_SIZE
     case data[0] # command
     when "read","write"
       puts line
       fork do
-        Process.exec("./client_traffic_executer.rb __last__ #{$host} #{$port} #{$host_ip} #{data[0]} #{data[1]} #{data[2]}")
+        Process.exec("./client_traffic_executer.rb __last__ #{$host} #{$port} #{$host_ip} #{data[0]} #{size} #{data[2]}")
       end
       Process.waitall
     when "sleep"

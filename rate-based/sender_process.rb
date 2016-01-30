@@ -85,7 +85,7 @@ class SenderProcess
         # limit counter
         @counter = [0,new_spd - last_used].max
       end
-      printf("Speed: %7.4f Mbps\n",@speed.mbps)
+      printf("Speed: %7.4f Mbps\n",@speed.mbps) if @active
     end
   end
 

@@ -23,10 +23,10 @@ def generate_test_pattern(f,pattern_time)
     else
       cmd = "write"
     end
-    if rand < 0.01 # large
+    if rand < 0.1 # large
       f.puts "#{cmd} #{rand(20*UNIT_MEGA) + 10*UNIT_MEGA} 1"
     else # small
-      f.puts "#{cmd} #{rand(2*UNIT_MEGA) + 1*UNIT_MEGA} 2"
+      f.puts "#{cmd} #{rand(0.5*UNIT_MEGA) + 1400} 2"
     end
   end
 end

@@ -62,15 +62,11 @@ def run_recv_loop(pkt_handler,ack_req)
     #loss = rand > 0.9
     while sub_n < sub_size
       data_req = parse_command(pkt_handler.recv(PACKET_SIZE))
-      #if loss && sub_n == CLI_ACK_SLICE_PKT - 1
-      #  break # Read but do nothing # TODO: LOSSING TEST  
-      #end
       current_read += PACKET_SIZE
       if data_req[:type] != "send data"
         if data_req[:type] == "send ack"
-          #puts "提早收到ACK"
+          puts "提早收到ACK"
           got_ack_req = data_req
-          #@pkt_buf.total_rx_loss[@port] += CLI_ACK_SLICE_PKT - 1 - sub_n
           loss = true
           break
         else
@@ -81,7 +77,6 @@ def run_recv_loop(pkt_handler,ack_req)
       end
       if data_req[:task_no] != task_n
         puts "Task預期：#{task_n}，收到：#{data_req[:task_no]}"
-        #@pkt_buf.total_rx_loss[@port] += CLI_ACK_SLICE_PKT 
         loss = true
         break
       end
@@ -91,7 +86,7 @@ def run_recv_loop(pkt_handler,ack_req)
       # Check Done
       if data_req[:extra] == "DONE"
         #puts "DATA DONE"
-        for i in sub_n...CLI_ACK_SLICE_PKT
+        for i in sub_n...sub_size
           sub_buf[i] = true
         end
         done = true
@@ -113,7 +108,6 @@ def run_recv_loop(pkt_handler,ack_req)
       # read until an ack appear
       #first = true
       begin
-        #@pkt_buf.total_rx[@port] -= PACKET_SIZE if !first
         #first = false
         if got_ack_req
           data_ack_req = got_ack_req
@@ -136,8 +130,11 @@ def run_recv_loop(pkt_handler,ack_req)
       # send ack back
       req_to_reply(data_ack_req)
       if loss
-        $total_rx_loss[port] += CLI_ACK_SLICE_PKT 
+        $total_rx_loss[port] += sub_size
         data_ack_req[:extra] = "LOSS"
+        sub_buf.each_with_index do |r,i|
+          puts i if !r
+        end
       else
         $total_rx[port] += current_read
         data_ack_req[:extra] = "OK"
@@ -164,7 +161,82 @@ def run_recv_loop(pkt_handler,ack_req)
 
 end
 def run_send_loop(pkt_handler,req)
-
+  
+  # Setup
+  port = pkt_handler.dst_port 
+  # Write back ack right now
+  ack_req = req
+  # IO type
+  $io_types[port] = io_type = ack_req[:extra].to_i
+  ack_req[:sub_size] = sub_size = get_sub_size(io_type)
+  # Compute pkt count
+  pkt_cnt = (ack_req[:data_size].to_f / PACKET_SIZE ).ceil
+  # Reply Ack
+  req_to_reply(ack_req)
+  sz = pkt_handler.send(pack_command(ack_req),0)
+  if TRAFFIC_COUNT_ACK
+    $total_tx[port] += sz
+  end
+  # Prepare
+  i = 0
+  done = false
+  stop = false
+  # ACK Req
+  ack_req = {}
+  ack_req[:is_request] = true
+  ack_req[:type] = "recv ack"
+  # Data Req
+  data_req = {}
+  data_req[:is_request] = true
+  data_req[:type] = "recv data"
+  loop do # send loop
+    current_send = 0
+    # start block
+    send_min = [sub_size,pkt_cnt].min
+    send_min.times do |j|
+      data_req[:task_no] = i
+      data_req[:sub_no] = [j]
+      current_send += 1
+      pkt_cnt -= 1
+      if pkt_cnt <= 0
+        data_req[:extra] = "DONE"
+        done = true
+      else
+        data_req[:extra] = "CONTINUE"
+      end
+      pkt_handler.send(pack_command(data_req),0)
+    end
+    # send ack
+    if RATE_BASED_WAIT_FOR_ACK
+      new_sub_size = get_sub_size(io_type)
+      ack_req[:sub_size] = new_sub_size
+      reply_req = send_and_wait_for_ack(pkt_handler,ack_req)
+      if TRAFFIC_COUNT_ACK
+        $total_rx[port] += PACKET_SIZE
+      end
+      if reply_req[:extra] == "LOSS"
+        pkt_cnt += current_send
+        $total_tx_loss[port] += sub_size
+        done = false
+      else
+        sub_size = new_sub_size
+        $total_tx[port] += current_send * PACKET_SIZE
+        if done
+          stop = true
+        end
+        i += 1
+        sub_size = reply_req[:sub_size]
+      end
+    else
+      if done
+        stop = true
+      end
+      i += 1
+    end
+    if stop
+      break
+    end
+  end
 end
 
 def run_port_thread(port)
@@ -187,7 +259,12 @@ def run_port_thread(port)
         run_recv_loop(receiver,req)
       elsif req[:is_request] && req[:type] == "recv init"
         sender = SenderProcess.bind_sock(sock,PASSIVE_PORT_TO_IP[port],port)
+        sender_control = Thread.new do
+          sender.run_control_loop
+        end
         run_send_loop(sender,req)
+        sender_control.exit
+        sender.close
       end
     end
   end
@@ -203,7 +280,7 @@ if pid = fork
     end
     data << pipe_r.gets
 
-    clear_screen
+    #clear_screen
     data.each do |str|
       print str
     end
