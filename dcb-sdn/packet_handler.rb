@@ -117,21 +117,23 @@ class PacketHandler
     sz = write_packet_raw(str,*peer)
     # Restore writing size
     @pkt_buf.total_tx[@port] -= sz if !TRAFFIC_COUNT_ACK
-    loop do
-      # get next
-      pkt = extract_next_packet(5)
-      if pkt && pkt[:req][:is_reply] && pkt[:req][:type] == ack_req[:type]
-        #puts "收到ACK reply"
-        @pkt_buf.total_rx[@port] -= pkt[:size] if !TRAFFIC_COUNT_ACK
-        return pkt[:req]
-      else
-        # Timedout
-        puts "重新傳輸 #{ack_req[:type]} request"
-        ensure_token(1,1)
-        @token -= 1
-        sz = write_packet_raw(str,*peer)
-        # Restore writing size
-        @pkt_buf.total_tx[@port] -= sz if !TRAFFIC_COUNT_ACK
+    if DCB_SENDER_REQUIRE_ACK
+      loop do
+        # get next
+        pkt = extract_next_packet(5)
+        if pkt && pkt[:req][:is_reply] && pkt[:req][:type] == ack_req[:type]
+          #puts "收到ACK reply"
+          @pkt_buf.total_rx[@port] -= pkt[:size] if !TRAFFIC_COUNT_ACK
+          return pkt[:req]
+        else
+          # Timedout
+          puts "重新傳輸 #{ack_req[:type]} request"
+          ensure_token(1,1)
+          @token -= 1
+          sz = write_packet_raw(str,*peer)
+          # Restore writing size
+          @pkt_buf.total_tx[@port] -= sz if !TRAFFIC_COUNT_ACK
+        end
       end
     end
   end
@@ -150,15 +152,19 @@ class PassivePacketHandler < PacketHandler
     io_type = ack_req[:extra].to_i
     # Compute pkt count
     pkt_cnt = (ack_req[:data_size].to_f / PACKET_SIZE ).ceil
-    sub_size = get_sub_size(io_type)
-    ack_req[:sub_size] = sub_size
-    # Reply Ack
-    req_to_reply(ack_req)
-    ensure_token(1,1)
-    @token -= 1
-    sz = write_packet_req(ack_req,*peer)
-    if !TRAFFIC_COUNT_ACK
-      @pkt_buf.total_tx[@port] -= sz
+    if DCB_SENDER_REQUIRE_ACK
+      sub_size = get_sub_size(io_type)
+      ack_req[:sub_size] = sub_size
+      # Reply Ack
+      req_to_reply(ack_req)
+      ensure_token(1,1)
+      @token -= 1
+      sz = write_packet_req(ack_req,*peer)
+      if !TRAFFIC_COUNT_ACK
+        @pkt_buf.total_tx[@port] -= sz
+      end
+    else
+      sub_size = pkt_cnt
     end
     # Prepare
     i = 0
@@ -177,9 +183,24 @@ class PassivePacketHandler < PacketHandler
       current_send = 0
       # start block
       send_min = [sub_size,pkt_cnt].min
-      min = send_min + DCB_SDN_EXTRA_TOKEN_USED
-      ensure_token(min,min)
+      if DCB_SENDER_REQUIRE_ACK
+        min = send_min + DCB_SDN_EXTRA_TOKEN_USED
+        ensure_token(min,min)
+      else
+        remain = send_min
+        interval_get = (remain / 10.0).ceil
+        this_get = [interval_get,DCB_SDN_MAX_TOKEN_REQ,remain].min
+        ensure_token(this_get,this_get)
+      end
       send_min.times do |j|
+        if !DCB_SENDER_REQUIRE_ACK
+          if @token <= 0
+            this_get = [interval_get,DCB_SDN_MAX_TOKEN_REQ,remain].min
+            ensure_token(this_get,this_get)
+          end
+          @token -= 1
+          remain -= 1
+        end
         data_req[:task_no] = i
         data_req[:sub_no] = [j]
         current_send += 1
@@ -193,7 +214,9 @@ class PassivePacketHandler < PacketHandler
         end
         write_packet_req(data_req,*peer)
       end
-      @token -= send_min
+      if DCB_SENDER_REQUIRE_ACK
+        @token -= send_min
+      end
       # send ack
       if DCB_SENDER_REQUIRE_ACK
         @token -= 1
@@ -234,13 +257,15 @@ class PassivePacketHandler < PacketHandler
     # Sub size 
     sub_size = ack_req[:sub_size]  
     # Reply Ack
-    req_to_reply(ack_req)
-    ensure_token(1,1)
-    #ensure_token(1,1)
-    @token -= 1
-    sz = write_packet_req(ack_req,*pkt[:peer])
-    if !TRAFFIC_COUNT_ACK
-      @pkt_buf.total_tx[@port] -= sz
+    if DCB_SENDER_REQUIRE_ACK
+      req_to_reply(ack_req)
+      ensure_token(1,1)
+      #ensure_token(1,1)
+      @token -= 1
+      sz = write_packet_req(ack_req,*pkt[:peer])
+      if !TRAFFIC_COUNT_ACK
+        @pkt_buf.total_tx[@port] -= sz
+      end
     end
     # Prepare
     task_n = 0
@@ -297,47 +322,49 @@ class PassivePacketHandler < PacketHandler
       else
         loss = true
       end
-      # read ack
-      # read until an ack appear
-      #first = true
-      begin
-        #@pkt_buf.total_rx[@port] -= PACKET_SIZE if !first
-        #first = false
-        if got_ack_pkt
-          data_ack_pkt = got_ack_pkt
-          got_ack_pkt = nil
-        else
-          data_ack_pkt = extract_next_packet
-          current_read += data_ack_pkt[:size]
+      # read ack 
+      if DCB_SENDER_REQUIRE_ACK
+        # read until an ack appear
+        #first = true
+        begin
+          #@pkt_buf.total_rx[@port] -= PACKET_SIZE if !first
+          #first = false
+          if got_ack_pkt
+            data_ack_pkt = got_ack_pkt
+            got_ack_pkt = nil
+          else
+            data_ack_pkt = extract_next_packet
+            current_read += data_ack_pkt[:size]
+          end
+          data_ack_req = data_ack_pkt[:req]
+          #puts "ACK：收到：#{data_ack_req}"
+        end while !(data_ack_req[:is_request] && data_ack_req[:type] == "send ack")
+        # ACK traffic count
+        if !got_ack_pkt && !TRAFFIC_COUNT_ACK
+          @pkt_buf.total_rx[@port] -= PACKET_SIZE
         end
-        data_ack_req = data_ack_pkt[:req]
-        #puts "ACK：收到：#{data_ack_req}"
-      end while !(data_ack_req[:is_request] && data_ack_req[:type] == "send ack")
-      # ACK traffic count
-      if !got_ack_pkt && !TRAFFIC_COUNT_ACK
-        @pkt_buf.total_rx[@port] -= PACKET_SIZE
-      end
-      current_read -= PACKET_SIZE
-      # send ack back
-      req_to_reply(data_ack_req)
-      new_sub_size = data_ack_req[:sub_size]
-      if loss
-        @pkt_buf.total_rx[@port] -= current_read
-        @pkt_buf.total_rx_loss[@port] += sub_size
-        data_ack_req[:extra] = "LOSS"
-      else
-        data_ack_req[:extra] = "OK"
-        task_n += 1
-        io_time = get_disk_io_time(io_type)
-        #printf "IO Time: %7.5f\n",io_time
-        sleep io_time
-        sub_size = new_sub_size
-      end
-      ensure_token(1,1)
-      @token -= 1
-      write_packet_req(data_ack_req,*data_ack_pkt[:peer])
-      if !TRAFFIC_COUNT_ACK
-        @pkt_buf.total_tx[@port] -= sz
+        current_read -= PACKET_SIZE
+        # send ack back
+        req_to_reply(data_ack_req)
+        new_sub_size = data_ack_req[:sub_size]
+        if loss
+          @pkt_buf.total_rx[@port] -= current_read
+          @pkt_buf.total_rx_loss[@port] += sub_size
+          data_ack_req[:extra] = "LOSS"
+        else
+          data_ack_req[:extra] = "OK"
+          task_n += 1
+          io_time = get_disk_io_time(io_type)
+          #printf "IO Time: %7.5f\n",io_time
+          sleep io_time
+          sub_size = new_sub_size
+        end
+        ensure_token(1,1)
+        @token -= 1
+        write_packet_req(data_ack_req,*data_ack_pkt[:peer])
+        if !TRAFFIC_COUNT_ACK
+          @pkt_buf.total_tx[@port] -= sz
+        end
       end
       if !loss && done
         #puts "DONE"
@@ -391,10 +418,15 @@ class ActivePacketHandler < PacketHandler
     init_req[:type] = "recv init"
     init_req[:data_size] = @total_send
     init_req[:extra] = @io_type
-    ensure_token(1,1)
     rep = send_and_wait_for_ack(init_req)
-    sub_size = rep[:sub_size]
+    if DCB_SENDER_REQUIRE_ACK
+      sub_size = rep[:sub_size]
+      ensure_token(1,1)
+    else
+      sub_size = (@total_send.to_f / PACKET_SIZE ).ceil
+    end
     task_n = 0
+    accu = @total_send
     # Recv loop
     loop do
       # read block
@@ -442,6 +474,10 @@ class ActivePacketHandler < PacketHandler
         else
           done = false
         end
+        if !DCB_SENDER_REQUIRE_ACK
+          accu -= PACKET_SIZE
+          puts "#{sub_n}/#{sub_size}  剩餘：#{accu}"
+        end
       end
       # 檢查sub buf 
       if sub_buf.all? {|v| v } && ( CLIENT_LOSS_RATE == 0.0 || rand > CLIENT_LOSS_RATE )
@@ -449,40 +485,42 @@ class ActivePacketHandler < PacketHandler
       else
         loss = true
       end
-      # read ack
-      # read until an ack appear
-      begin
-        if got_ack_pkt
-          data_ack_pkt = got_ack_pkt
-          got_ack_pkt = nil
-        else
-          data_ack_pkt = extract_next_packet
-          current_read += data_ack_pkt[:size]
+      # read ack 
+      if DCB_SENDER_REQUIRE_ACK
+        # read until an ack appear
+        begin
+          if got_ack_pkt
+            data_ack_pkt = got_ack_pkt
+            got_ack_pkt = nil
+          else
+            data_ack_pkt = extract_next_packet
+            current_read += data_ack_pkt[:size]
+          end
+          data_ack_req = data_ack_pkt[:req]
+          #puts "ACK：收到：#{data_ack_req}"
+        end while !(data_ack_req[:is_request] && data_ack_req[:type] == "recv ack")
+        # ACK traffic count
+        if !got_ack_pkt && !TRAFFIC_COUNT_ACK
+          @pkt_buf.total_rx[@port] -= PACKET_SIZE
         end
-        data_ack_req = data_ack_pkt[:req]
-        #puts "ACK：收到：#{data_ack_req}"
-      end while !(data_ack_req[:is_request] && data_ack_req[:type] == "recv ack")
-      # ACK traffic count
-      if !got_ack_pkt && !TRAFFIC_COUNT_ACK
-        @pkt_buf.total_rx[@port] -= PACKET_SIZE
+        current_read -= PACKET_SIZE
+        # send ack back
+        req_to_reply(data_ack_req)
+        if loss
+          data_ack_req[:extra] = "LOSS"
+        else
+          data_ack_req[:extra] = "OK"
+          task_n += 1
+          io_time = get_disk_io_time(@io_type)
+          #printf "IO Time: %7.5f\n",io_time
+          sleep io_time
+          sub_size = data_ack_req[:sub_size]
+        end
+        ensure_token(1,1)
+        @token -= 1
+        #puts "Reply ACK：#{data_ack_req}"
+        write_packet_req(data_ack_req)
       end
-      current_read -= PACKET_SIZE
-      # send ack back
-      req_to_reply(data_ack_req)
-      if loss
-        data_ack_req[:extra] = "LOSS"
-      else
-        data_ack_req[:extra] = "OK"
-        task_n += 1
-        io_time = get_disk_io_time(@io_type)
-        #printf "IO Time: %7.5f\n",io_time
-        sleep io_time
-        sub_size = data_ack_req[:sub_size]
-      end
-      ensure_token(1,1)
-      @token -= 1
-      #puts "Reply ACK：#{data_ack_req}"
-      write_packet_req(data_ack_req)
       if !loss && done
         puts "DONE"
         Process.kill("INT",Process.pid)
@@ -501,7 +539,11 @@ class ActivePacketHandler < PacketHandler
     ack_req[:type] = "send ack"
     last_time = Time.now
     # Sub size
-    sub_size = get_sub_size(@io_type)
+    if DCB_SENDER_REQUIRE_ACK
+      sub_size = get_sub_size(@io_type)
+    else
+      sub_size = (@total_send.to_f / PACKET_SIZE ).ceil
+    end
     # Data Req
     data_req = {}
     data_req[:is_request] = true
@@ -519,15 +561,26 @@ class ActivePacketHandler < PacketHandler
     # Start Data Packet
     loop do
       current_send = 0
-      #puts "Start #{i} , interval = #{(Time.now - last_time)*1000}ms"
       last_time = Time.now
-      #(rand(100)+1).times do
       done = false
-      #puts "SEND SUB SIZE: #{sub_size}"
-      min = sub_size +  DCB_SDN_EXTRA_TOKEN_USED
-      ensure_token(min,min)
+      if DCB_SENDER_REQUIRE_ACK
+        min = sub_size +  DCB_SDN_EXTRA_TOKEN_USED
+        ensure_token(min,min)
+      else
+        remain = sub_size
+        interval_get = (sub_size / 10.0).ceil
+        this_get = [interval_get,DCB_SDN_MAX_TOKEN_REQ,remain].min
+        ensure_token(this_get,this_get)
+      end
       sub_size.times do |j|
-        #puts "Send : #{j}"
+        if !DCB_SENDER_REQUIRE_ACK
+          if @token <= 0
+            this_get = [interval_get,DCB_SDN_MAX_TOKEN_REQ,remain].min
+            ensure_token(this_get,this_get)
+          end
+          @token -= 1
+          remain -= 1
+        end
         data_req[:task_no] = i
         data_req[:sub_no] = [j]
         @total_send -= PACKET_SIZE
@@ -545,7 +598,9 @@ class ActivePacketHandler < PacketHandler
           break
         end
       end
-      @token -= sub_size
+      if DCB_SENDER_REQUIRE_ACK
+        @token -= sub_size
+      end
       if DCB_SENDER_REQUIRE_ACK
         new_sub_size = get_sub_size(@io_type)
         ack_req[:sub_size] = new_sub_size
