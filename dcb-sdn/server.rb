@@ -99,7 +99,7 @@ else
   # ///////////
   # Pkt Buffer: read loop
   # ///////////
-  thr_read = run_read_thread
+  #thr_read = run_read_thread
   
   # ///////////
   # Pkt Handler: per-port loop

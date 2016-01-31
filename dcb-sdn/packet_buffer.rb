@@ -220,6 +220,25 @@ class PacketBuffer
     size
   end
 
+  def extract_next_packet(port,timeout)
+    sock = @peers[port]
+    ready = IO.select([sock],[],[],timeout)
+    return nil if !ready
+    pack = sock.recvfrom(PACKET_SIZE)  #=> ["aaa", ["AF_INET", 33302, "localhost.localdomain", "127.0.0.1"]]
+    size = pack[0].size
+    pkt = {}
+    pkt[:port] = port
+    pkt[:size] = size
+    req = parse_command(pack[0])
+    pkt[:req] = req
+    pkt[:msg] = pack[0]
+    pkt[:peer] = [pack[1][3],pack[1][1]]
+    @total_rx[port] += PACKET_SIZE
+    add_free_token(1)
+    stop_go_check
+    pkt
+  end
+
   def extract_block(port,timeout = nil)
     block_data = []
     get_size_a = [0] 

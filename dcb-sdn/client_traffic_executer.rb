@@ -45,9 +45,9 @@ end
 # ///////////
 # Pkt Buffer: read loop
 # ///////////
-$thr_read = Thread.new do
-  $pkt_buf.run_receive_loop
-end
+#$thr_read = Thread.new do
+#  $pkt_buf.run_receive_loop
+#end
 
 # ///////////
 # Pkt Buffer: stop go loop
@@ -80,7 +80,7 @@ rescue SystemExit, Interrupt
   $thr_port.join
   $pkt_buf.end_receive
   puts "關閉Packet Buffer..."
-  $thr_read.exit
+  #$thr_read.exit
   puts "關閉Control API..."
   $control_api.close
   $thr_control.join

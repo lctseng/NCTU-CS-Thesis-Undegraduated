@@ -1,3 +1,4 @@
+require_relative 'common'
 class PacketHandler
 
   attr_reader :id
@@ -83,22 +84,7 @@ class PacketHandler
   end
 
   def extract_next_packet(timeout = nil)
-    # process data in block
-    if @block_buf.empty?
-      @block_buf = @pkt_buf.extract_block(@port,timeout)
-      if !@block_buf.empty?
-        #puts "#{@port} Extracted block#: #{@block_buf.size}"
-        #sleep (rand(3)+1)*0.0001
-      else
-        #sleep 0.1
-      end
-    end
-    if !@block_buf.empty?
-      #puts "buffer remain:#{@block_buf.size}"
-      return @block_buf.shift
-    else
-      return nil
-    end
+    @pkt_buf.extract_next_packet(@port,timeout)
   end
 
   def write_packet_req(req,*peer)
@@ -175,8 +161,21 @@ class PassivePacketHandler < PacketHandler
       # start block
       send_min = [CLI_ACK_SLICE_PKT,pkt_cnt].min
       min = send_min + DCB_SDN_EXTRA_TOKEN_USED
-      ensure_token(min,min)
+      remain = min
+      get_interval = min / 10
+      this_get = [remain,get_interval].min
+      ensure_token(this_get,this_get)
+      @token -= this_get
+      valid = this_get
       send_min.times do |j|
+        if valid == 0
+          this_get = [remain,get_interval].min
+          ensure_token(this_get,this_get)
+          valid = this_get
+          @token -= this_get
+        end
+        valid -= 1
+        remain -= 1
         data_req[:task_no] = i
         data_req[:sub_no] = [j]
         current_send += 1
@@ -190,7 +189,6 @@ class PassivePacketHandler < PacketHandler
         end
         write_packet_req(data_req,*peer)
       end
-      @token -= send_min
       # send ack
       if DCB_SENDER_REQUIRE_ACK
         @token -= 1
@@ -392,9 +390,15 @@ class ActivePacketHandler < PacketHandler
 
       # Sub data buffer
       sub_buf = [false] * CLI_ACK_SLICE_PKT
-
+      timing = Timing.start
+      accu = 0.0
       while sub_n < CLI_ACK_SLICE_PKT
+        per_timing = Timing.start
         data_pkt = extract_next_packet
+        tv = per_timing.check
+        accu += tv
+        puts "Receive PKT delay : #{tv} ms, ACCU: #{accu} ms"
+        per_timing.start
         current_read += data_pkt[:size]
         data_req = data_pkt[:req]
         if data_req[:type] != "recv data"
@@ -430,6 +434,7 @@ class ActivePacketHandler < PacketHandler
           done = false
         end
       end
+      puts "Receive Delay: #{timing.end} ms"
       # 檢查sub buf 
       if sub_buf.all? {|v| v } && ( CLIENT_LOSS_RATE == 0.0 || rand > CLIENT_LOSS_RATE )
         # 全都有
@@ -463,11 +468,13 @@ class ActivePacketHandler < PacketHandler
         task_n += 1
         ack_cnt -= 1
       end
+      ack_timing = Timing.start
       ensure_token(1,ack_cnt)
       #ensure_token(1,ack_cnt)
       @token -= 1
       #puts "Reply ACK：#{data_ack_req}"
       write_packet_req(data_ack_req)
+      puts "ACK Using: #{ack_timing.end} ms"
       if !loss && done
         puts "DONE"
         Process.kill("INT",Process.pid)
@@ -505,8 +512,21 @@ class ActivePacketHandler < PacketHandler
       #(rand(100)+1).times do
       done = false
       min = CLI_ACK_SLICE_PKT +  DCB_SDN_EXTRA_TOKEN_USED
-      ensure_token(min,min)
+      remain = CLI_ACK_SLICE_PKT
+      get_interval = CLI_ACK_SLICE_PKT / 10
+      this_get = [remain,get_interval].min
+      ensure_token(this_get,this_get)
+      @token -= this_get
+      valid = this_get
       CLI_ACK_SLICE_PKT.times do |j|
+        if valid == 0
+          this_get = [remain,get_interval].min
+          ensure_token(this_get,this_get)
+          valid = this_get
+          @token -= this_get
+        end
+        valid -= 1
+        remain -= 1
         data_req[:task_no] = i
         data_req[:sub_no] = [j]
         @total_send -= PACKET_SIZE
@@ -524,7 +544,6 @@ class ActivePacketHandler < PacketHandler
           break
         end
       end
-      @token -= CLI_ACK_SLICE_PKT 
       if DCB_SENDER_REQUIRE_ACK
         @token -= 1
         reply_req = send_and_wait_for_ack(ack_req)
