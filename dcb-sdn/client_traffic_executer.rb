@@ -16,6 +16,7 @@ $port = ARGV[2].to_i
 $host_ip = ARGV[3]
 $command = ARGV[4]
 $size = ARGV[5].to_i
+$io_type = ARGV[6].to_i
 if CLIENT_RANDOM_FIXED_SEED
   srand($port)
 end
@@ -27,6 +28,11 @@ end
 if $size <= 0
   puts "Size need to > 0"
   puts "Usage: client [mode] [target_ip] [target_port] [client_ip] [size]"
+  exit
+end
+if $io_type <= 0
+  puts "IO type need to > 0"
+  puts "Usage: client [mode] [target_ip] [target_port] [client_ip] [cmd] [size] [io_type]"
   exit
 end
 
@@ -63,7 +69,7 @@ $thr_write  = Thread.new do
   $pkt_buf.writer_loop($port) 
 end
 
-$peer = ActivePacketHandler.new($pkt_buf,$host,$port,$size)
+$peer = ActivePacketHandler.new($pkt_buf,$host,$port,$size,$io_type)
 $control_api.register_handler($peer)
 
 $thr_port = Thread.new do

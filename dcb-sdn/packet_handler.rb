@@ -223,6 +223,8 @@ class PassivePacketHandler < PacketHandler
   def run_recv_loop(pkt)
     # Write back ack right now
     ack_req = pkt[:req]
+    # IO type
+    io_type = ack_req[:extra].to_i
     # Compute loop number
     ack_cnt = (ack_req[:data_size].to_f / CLI_ACK_SLICE ).ceil
     # Reply Ack
@@ -324,6 +326,9 @@ class PassivePacketHandler < PacketHandler
       ensure_token(1,ack_cnt)
       #ensure_token(1,ack_cnt)
       @token -= 1
+      io_time = get_disk_io_time(io_type)
+      #printf "IO Time: %7.5f\n",io_time
+      sleep io_time
       write_packet_req(data_ack_req,*data_ack_pkt[:peer])
       if !TRAFFIC_COUNT_ACK
         @pkt_buf.total_tx[@port] -= sz
@@ -357,10 +362,11 @@ end
 class ActivePacketHandler < PacketHandler
 
 
-  def initialize(pkt_buf,peer_ip,port,total_send)
+  def initialize(pkt_buf,peer_ip,port,total_send,io_type)
     super(pkt_buf,peer_ip,port)
     @stop = false
     @total_send = total_send
+    @io_type = io_type
   end
 
   def run_loop(type)
@@ -379,6 +385,7 @@ class ActivePacketHandler < PacketHandler
     init_req[:is_request] = true
     init_req[:type] = "recv init"
     init_req[:data_size] = @total_send
+    init_req[:extra] = @io_type
     ensure_token(1,1)
     send_and_wait_for_ack(init_req)
     task_n = 0
@@ -467,6 +474,9 @@ class ActivePacketHandler < PacketHandler
       #ensure_token(1,ack_cnt)
       @token -= 1
       #puts "Reply ACK：#{data_ack_req}"
+      io_time = get_disk_io_time($io_type)
+      #printf "IO Time: %7.5f\n",io_time
+      sleep io_time
       write_packet_req(data_ack_req)
       if !loss && done
         puts "DONE"
@@ -494,6 +504,7 @@ class ActivePacketHandler < PacketHandler
     init_req[:is_request] = true
     init_req[:type] = "send init"
     init_req[:data_size] = @total_send
+    init_req[:extra] = @io_type
     ensure_token(1,1)
     send_and_wait_for_ack(init_req)
     @token -= 1
