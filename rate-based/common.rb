@@ -267,17 +267,19 @@ end
 def send_and_wait_for_ack(packet_sender,ack_req)
   str = pack_command(ack_req)
   packet_sender.send(str,0)
-  loop do
-    # get next
-    req = extract_next_req(packet_sender.target_sock,5)
-    if req && req[:is_reply] && req[:type] == ack_req[:type]
-      #puts "收到ACK reply"
-      return req
-    else
-      # Timedout
-      puts "收到：#{req}"
-      puts "重新傳輸 #{ack_req[:type]} request"
-      packet_sender.send(str,0)
+  if RATE_BASED_WAIT_FOR_ACK
+    loop do
+      # get next
+      req = extract_next_req(packet_sender.target_sock,5)
+      if req && req[:is_reply] && req[:type] == ack_req[:type]
+        #puts "收到ACK reply"
+        return req
+      else
+        # Timedout
+        puts "收到：#{req}"
+        puts "重新傳輸 #{ack_req[:type]} request"
+        packet_sender.send(str,0)
+      end
     end
   end
 end

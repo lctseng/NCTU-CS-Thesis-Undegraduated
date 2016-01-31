@@ -67,7 +67,11 @@ if $command == "write"
   data_req = {}
   data_req[:is_request] = true
   data_req[:type] = "send data"
-  sub_size = get_sub_size($io_type)
+  if RATE_BASED_WAIT_FOR_ACK
+    sub_size = get_sub_size($io_type)
+  else
+    sub_size = ($size.to_f / PACKET_SIZE ).ceil 
+  end
   # Send Init request
   init_req = {}
   init_req[:is_request] = true
@@ -98,8 +102,8 @@ if $command == "write"
       end
     end
     # Update sub size
-    sub_size = get_sub_size($io_type)
     if RATE_BASED_WAIT_FOR_ACK
+      sub_size = get_sub_size($io_type)
       ack_req[:sub_size] = sub_size
       timing.start
       reply_req = send_and_wait_for_ack($sender,ack_req)
@@ -145,8 +149,14 @@ else
   init_req[:data_size] = $size
   init_req[:extra] = $io_type
   rep = send_and_wait_for_ack($sender,init_req)
-  sub_size = rep[:sub_size]
+  if RATE_BASED_WAIT_FOR_ACK
+    sub_size = rep[:sub_size]
+  else
+    sub_size = ($size.to_f / PACKET_SIZE ).ceil
+  end
   task_n = 0
+
+  accu = $size
   # Recv loop
   loop do
     # read block
@@ -157,7 +167,9 @@ else
 
     # Sub data buffer
     sub_buf = [false] * sub_size
-    printf "Start Task: %5d，max sub size: %3d ",task_n,sub_size
+    if RATE_BASED_WAIT_FOR_ACK
+      printf "Start Task: %5d，max sub size: %3d ",task_n,sub_size
+    end
     while sub_n < sub_size
       data_req = extract_next_req($sender.target_sock)
       current_read += PACKET_SIZE
@@ -177,19 +189,28 @@ else
         loss = true
         break
       end
+      if !RATE_BASED_WAIT_FOR_ACK
+        accu -= PACKET_SIZE
+        puts "剩餘大小：#{accu}"
+        if accu <= 0
+          done = true
+        end
+      end
       data_sub_n = data_req[:sub_no][0] 
       sub_buf[data_sub_n] = true
       sub_n += 1
       # Check Done
-      if data_req[:extra] == "DONE"
-        #puts "DATA DONE"
-        for i in sub_n...sub_size
-          sub_buf[i] = true
+      if RATE_BASED_WAIT_FOR_ACK
+        if data_req[:extra] == "DONE"
+          #puts "DATA DONE"
+          for i in sub_n...sub_size
+            sub_buf[i] = true
+          end
+          done = true
+          break
+        else
+          done = false
         end
-        done = true
-        break
-      else
-        done = false
       end
     end
     # 檢查sub buf 
@@ -198,38 +219,40 @@ else
     else
       loss = true
     end
-    # read ack
-    # read until an ack appear
-    begin
-      if got_ack_req
-        data_ack_req = got_ack_req
-        got_ack_req = nil
-        current_read -= PACKET_SIZE
+    # read ack 
+    if RATE_BASED_WAIT_FOR_ACK 
+      # read until an ack appear
+      begin
+        if got_ack_req
+          data_ack_req = got_ack_req
+          got_ack_req = nil
+          current_read -= PACKET_SIZE
+        else
+          data_ack_req = extract_next_req($sender.target_sock)
+        end
+        #puts "ACK：收到：#{data_ack_req}"
+      end while !(data_ack_req[:is_request] && data_ack_req[:type] == "recv ack")
+      # send ack back
+      req_to_reply(data_ack_req)
+      if loss
+        sub_buf.each_with_index do |r,i|
+          puts i if !r
+        end
+        data_ack_req[:extra] = "LOSS"
+        puts "重新開始：#{task_n}"
       else
-        data_ack_req = extract_next_req($sender.target_sock)
+        $size -= current_read
+        data_ack_req[:extra] = "OK"
+        task_n += 1
+        puts "剩餘大小：#{$size}" if RATE_BASED_WAIT_FOR_ACK
+        sub_size = data_ack_req[:sub_size]
       end
-      #puts "ACK：收到：#{data_ack_req}"
-    end while !(data_ack_req[:is_request] && data_ack_req[:type] == "recv ack")
-    # send ack back
-    req_to_reply(data_ack_req)
-    if loss
-      sub_buf.each_with_index do |r,i|
-        puts i if !r
-      end
-      data_ack_req[:extra] = "LOSS"
-      puts "重新開始：#{task_n}"
-    else
-      $size -= current_read
-      data_ack_req[:extra] = "OK"
-      task_n += 1
-      puts "剩餘大小：#{$size}"
-      sub_size = data_ack_req[:sub_size]
+      #puts "Reply ACK：#{data_ack_req}"
+      io_time = get_disk_io_time($io_type)
+      #printf "IO Time: %7.5f\n",io_time
+      sleep io_time
+      $sender.send(pack_command(data_ack_req),0)
     end
-    #puts "Reply ACK：#{data_ack_req}"
-    io_time = get_disk_io_time($io_type)
-    #printf "IO Time: %7.5f\n",io_time
-    sleep io_time
-    $sender.send(pack_command(data_ack_req),0)
     if !loss && done
       puts "DONE"
       break

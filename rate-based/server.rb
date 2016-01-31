@@ -40,12 +40,14 @@ def run_recv_loop(pkt_handler,ack_req)
   # Compute loop number
   ack_cnt = (ack_req[:data_size].to_f / CLI_ACK_SLICE ).ceil
   # Sub size 
-  sub_size = ack_req[:sub_size]
+  sub_size = ack_req[:sub_size]  
   # Reply Ack
-  req_to_reply(ack_req)
-  sz = pkt_handler.send(pack_command(ack_req),0)
-  if TRAFFIC_COUNT_ACK
-    $total_tx[port] += sz
+  if RATE_BASED_WAIT_FOR_ACK
+    req_to_reply(ack_req)
+    sz = pkt_handler.send(pack_command(ack_req),0)
+    if TRAFFIC_COUNT_ACK
+      $total_tx[port] += sz
+    end
   end
   # Prepare
   task_n = 0
@@ -94,6 +96,9 @@ def run_recv_loop(pkt_handler,ack_req)
       else
         #puts "Not DONE"
         done = false
+      end
+      if !RATE_BASED_WAIT_FOR_ACK
+        $total_rx[port] += PACKET_SIZE
       end
     end
     #puts "Done with sub_n = #{sub_n} , sz = #{sub_buf.size}"
@@ -150,7 +155,9 @@ def run_recv_loop(pkt_handler,ack_req)
         $total_tx[port] += sz
       end
     else
-      $total_rx[port] += current_read
+      if loss
+        puts "LOSS!!!"
+      end
       task_n += 1
     end
     if !loss && done
@@ -166,16 +173,21 @@ def run_send_loop(pkt_handler,req)
   port = pkt_handler.dst_port 
   # Write back ack right now
   ack_req = req
-  # IO type
-  $io_types[port] = io_type = ack_req[:extra].to_i
-  ack_req[:sub_size] = sub_size = get_sub_size(io_type)
   # Compute pkt count
   pkt_cnt = (ack_req[:data_size].to_f / PACKET_SIZE ).ceil
-  # Reply Ack
-  req_to_reply(ack_req)
-  sz = pkt_handler.send(pack_command(ack_req),0)
-  if TRAFFIC_COUNT_ACK
-    $total_tx[port] += sz
+  # IO type
+  $io_types[port] = io_type = ack_req[:extra].to_i
+  if RATE_BASED_WAIT_FOR_ACK
+    sub_size = get_sub_size(io_type)
+    ack_req[:sub_size] = sub_size
+    # Reply Ack
+    req_to_reply(ack_req)
+    sz = pkt_handler.send(pack_command(ack_req),0)
+    if TRAFFIC_COUNT_ACK
+      $total_tx[port] += sz
+    end
+  else
+    sub_size = pkt_cnt 
   end
   # Prepare
   i = 0
@@ -205,6 +217,9 @@ def run_send_loop(pkt_handler,req)
         data_req[:extra] = "CONTINUE"
       end
       pkt_handler.send(pack_command(data_req),0)
+      if !RATE_BASED_WAIT_FOR_ACK
+        $total_tx[port] += PACKET_SIZE
+      end
     end
     # send ack
     if RATE_BASED_WAIT_FOR_ACK
@@ -247,7 +262,7 @@ def run_port_thread(port)
       # receive command
       receiver = ReceiverProcess.bind_sock(sock,PASSIVE_PORT_TO_IP[port],port)
       cmd = receiver.recv(PACKET_SIZE)
-      if TRAFFIC_COUNT_ACK
+      if RATE_BASED_WAIT_FOR_ACK && TRAFFIC_COUNT_ACK
         $total_rx[port] += PACKET_SIZE
       end
       req = parse_command(cmd)
