@@ -103,8 +103,8 @@ if $command == "write"
     end
     # Update sub size
     if RATE_BASED_WAIT_FOR_ACK
-      sub_size = get_sub_size($io_type)
-      ack_req[:sub_size] = sub_size
+      new_sub_size = get_sub_size($io_type)
+      ack_req[:sub_size] = new_sub_size
       timing.start
       reply_req = send_and_wait_for_ack($sender,ack_req)
       #printf "ACK RTT: %9.4f ms\n",timing.end
@@ -112,6 +112,7 @@ if $command == "write"
         $size += current_send
         done = false
       else
+        sub_size = new_sub_size
         if done
           $stop = true
         end

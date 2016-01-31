@@ -131,7 +131,7 @@ def run_recv_loop(pkt_handler,ack_req)
       end
       current_read -= PACKET_SIZE
       # Update sub size
-      sub_size = data_ack_req[:sub_size]
+      new_sub_size = data_ack_req[:sub_size]
       # send ack back
       req_to_reply(data_ack_req)
       if loss
@@ -145,6 +145,7 @@ def run_recv_loop(pkt_handler,ack_req)
         data_ack_req[:extra] = "OK"
         task_n += 1
         ack_cnt -= 1
+        sub_size = new_sub_size
       end
       io_time = get_disk_io_time(io_type)
       #printf "IO Time: %7.5f\n",io_time
