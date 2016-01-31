@@ -1,3 +1,4 @@
+require_relative 'common'
 class PacketHandler
 
   attr_reader :id
@@ -84,15 +85,12 @@ class PacketHandler
 
   def extract_next_packet(timeout = nil)
     # process data in block
-    if @block_buf.empty?
+    while @block_buf.empty?
+      timing = Timing.start
       @block_buf = @pkt_buf.extract_block(@port,timeout)
-      if !@block_buf.empty?
-        #puts "#{@port} Extracted block#: #{@block_buf.size}"
-        #sleep (rand(3)+1)*0.0001
-      else
-        #sleep 0.1
-      end
+      #puts "Block Extract Delay :#{timing.end} ms，Size：#{@block_buf.size}"
     end
+    #puts "Buffer size: #{@block_buf.collect{|s| s.class}}"
     if !@block_buf.empty?
       #puts "buffer remain:#{@block_buf.size}"
       return @block_buf.shift
@@ -119,7 +117,9 @@ class PacketHandler
     @pkt_buf.total_tx[@port] -= sz if !TRAFFIC_COUNT_ACK
     loop do
       # get next
+      timing = Timing.start
       pkt = extract_next_packet(5)
+      #puts "Extract delay: #{timing.end}ms"
       if pkt && pkt[:req][:is_reply] && pkt[:req][:type] == ack_req[:type]
         #puts "收到ACK reply"
         @pkt_buf.total_rx[@port] -= pkt[:size] if !TRAFFIC_COUNT_ACK
@@ -243,10 +243,10 @@ class PassivePacketHandler < PacketHandler
       sub_n = 0
       loss = false
       current_read = 0
-
+      
       # Sub data buffer
       sub_buf = [false] * CLI_ACK_SLICE_PKT
-
+      timing = Timing.start
       while sub_n < CLI_ACK_SLICE_PKT
         data_pkt = extract_next_packet
         current_read += data_pkt[:size]
@@ -283,13 +283,15 @@ class PassivePacketHandler < PacketHandler
           done = false
         end
       end
-      # 檢查sub buf 
+      #puts "Timing : #{timing.end} ms"
+      # 檢查sub buf  
       if sub_buf.all? {|v| v } && ( SERVER_LOSS_RATE == 0.0 || rand > SERVER_LOSS_RATE )
         # 全都有
       else
         loss = true
       end
       # read ack
+      ack_timing = Timing.start
       # read until an ack appear
       #first = true
       begin
@@ -325,6 +327,7 @@ class PassivePacketHandler < PacketHandler
       #ensure_token(1,ack_cnt)
       @token -= 1
       write_packet_req(data_ack_req,*data_ack_pkt[:peer])
+      #puts "ACK Timing:#{ack_timing.end}ms"
       if !TRAFFIC_COUNT_ACK
         @pkt_buf.total_tx[@port] -= sz
       end
@@ -484,7 +487,7 @@ class ActivePacketHandler < PacketHandler
     ack_req = {}
     ack_req[:is_request] = true
     ack_req[:type] = "send ack"
-    last_time = Time.now
+    timing = Timing.start
     # Data Req
     data_req = {}
     data_req[:is_request] = true
@@ -500,8 +503,7 @@ class ActivePacketHandler < PacketHandler
     # Start Data Packet
     loop do
       current_send = 0
-      #puts "Start #{i} , interval = #{(Time.now - last_time)*1000}ms"
-      last_time = Time.now
+      #puts "Start #{i} , interval = #{timing.end}ms"
       #(rand(100)+1).times do
       done = false
       min = CLI_ACK_SLICE_PKT +  DCB_SDN_EXTRA_TOKEN_USED
@@ -527,7 +529,9 @@ class ActivePacketHandler < PacketHandler
       @token -= CLI_ACK_SLICE_PKT 
       if DCB_SENDER_REQUIRE_ACK
         @token -= 1
+        ack_timing = Timing.start
         reply_req = send_and_wait_for_ack(ack_req)
+        #puts "ACK delay: #{ack_timing.end} ms"
         if reply_req[:extra] == "LOSS"
           @total_send += current_send
           done = false

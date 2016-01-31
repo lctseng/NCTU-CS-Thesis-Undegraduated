@@ -1,0 +1,53 @@
+
+  def run_receive_loop
+    loop do
+      ready = IO.select(@peers_list)
+      ready[0].each do |sock|
+        timing = Timing.start
+        port = @sock_data[sock]
+        acks = []
+        @data_locks[port].synchronize do
+          loop do
+            begin
+              pack = sock.recvfrom_nonblock(PACKET_SIZE)  #=> ["aaa", ["AF_INET", 33302, "localhost.localdomain", "127.0.0.1"]]
+              size = pack[0].size
+              pkt = {}
+              pkt[:port] = port
+              pkt[:size] = size
+              req = parse_command(pack[0])
+              pkt[:req] = req
+              pkt[:msg] = pack[0]
+              pkt[:peer] = [pack[1][3],pack[1][1]]
+              # reply ack 
+              if  DCB_SDN_PREMATURE_ACK && req[:is_request] && req[:type] == "data ack"
+                req[:is_request] = false
+                req[:is_reply] = true
+                acks << pkt
+                @total_rx[port] += PACKET_SIZE
+                add_free_token(1)
+              elsif store_packet(pkt)
+                # store success 
+              else 
+                @total_rx_loss[port] += 1
+                add_free_token(1)
+                #puts "Packet Buffer full when adding packet from #{port}!"
+              end
+            rescue IO::WaitReadable
+              break
+            end
+          end
+          @cond_var[port].signal
+        end
+        #puts "Target #{port} Size:#{@data[port].size}" 
+        puts "BUF Raw data recving delay: #{timing.end} ms"
+        if !acks.empty?
+          @writer_locks[port].synchronize do
+            @write_queue[port] += acks
+            @writer_cond[port].signal
+          end
+        end
+      end
+      stop_go_check
+    end
+  end
+

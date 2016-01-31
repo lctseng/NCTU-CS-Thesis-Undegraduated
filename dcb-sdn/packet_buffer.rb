@@ -1,6 +1,7 @@
 require_relative 'config'
 require 'thread'
 require 'token_adder'
+require 'common'
 
 class PacketBuffer
 
@@ -98,15 +99,94 @@ class PacketBuffer
   def send_token(token,time)
   end
 
+  def run_receive_loop_port(port)
+    loop_timing = Timing.start
+    sock_arr = [@peers[port]]
+    add_timing = Timing.start
+    added = 0 
+    loop do
+      ready = IO.select(sock_arr,[],[],0.001)
+      #puts "DATA COME AT #{Time.now.to_f}" if @active
+      if !ready
+        if added > 0
+          added = 0
+          add_timing.start
+          @cond_var[port].signal
+          #puts "Pre Sigal at #{Time.now.to_f}" if @active
+          #puts "Pre Target #{port} Size:#{@data[port].size}"  if @active
+        end
+        next
+      end
+      ready[0].each do |sock|
+        timing = Timing.start
+        acks = []
+        current_added = 0
+        @data_locks[port].synchronize do
+          300.times do
+            begin
+              pack = sock.recvfrom_nonblock(PACKET_SIZE)  #=> ["aaa", ["AF_INET", 33302, "localhost.localdomain", "127.0.0.1"]]
+              size = pack[0].size
+              pkt = {}
+              pkt[:port] = port
+              pkt[:size] = size
+              req = parse_command(pack[0])
+              pkt[:req] = req
+              pkt[:msg] = pack[0]
+              pkt[:peer] = [pack[1][3],pack[1][1]]
+              # reply ack 
+              if  DCB_SDN_PREMATURE_ACK && req[:is_request] && req[:type] == "data ack"
+                req[:is_request] = false
+                req[:is_reply] = true
+                acks << pkt
+                @total_rx[port] += PACKET_SIZE
+                add_free_token(1)
+              elsif store_packet(pkt)
+                added += 1
+                current_added += 1
+                # store success 
+              else 
+                @total_rx_loss[port] += 1
+                add_free_token(1)
+                #puts "Packet Buffer full when adding packet from #{port}!"
+              end
+            rescue IO::WaitReadable
+              break
+            end
+          end
+          add_interval = add_timing.check
+          if added >= 150 || add_interval > 10
+            added = 0
+            add_timing.start
+            @cond_var[port].signal
+            #puts "Sigal at #{Time.now.to_f}" if @active
+            #puts "Target #{port} Size:#{@data[port].size}"  if @active
+          else
+            #puts "ACCU: #{added}"
+          end
+        end
+        #puts "BUF Raw data recving delay: #{timing.end} ms" if @active
+        if !acks.empty?
+          @writer_locks[port].synchronize do
+            @write_queue[port] += acks
+            @writer_cond[port].signal
+          end
+        end
+      end
+      stop_go_check
+      sleep 0.0001
+    end
+  end
 
   def run_receive_loop
+    loop_timing = Timing.start
     loop do
       ready = IO.select(@peers_list)
       ready[0].each do |sock|
+        timing = Timing.start
         port = @sock_data[sock]
         acks = []
         @data_locks[port].synchronize do
-          loop do
+          5.times do
             begin
               pack = sock.recvfrom_nonblock(PACKET_SIZE)  #=> ["aaa", ["AF_INET", 33302, "localhost.localdomain", "127.0.0.1"]]
               size = pack[0].size
@@ -135,8 +215,10 @@ class PacketBuffer
               break
             end
           end
+          @cond_var[port].signal
         end
-        @cond_var[port].signal
+        #puts "Target #{port} Size:#{@data[port].size}" 
+        #puts "BUF Raw data recving delay: #{timing.end} ms" if @active
         if !acks.empty?
           @writer_locks[port].synchronize do
             @write_queue[port] += acks
@@ -219,16 +301,19 @@ class PacketBuffer
     @total_tx[port] += size
     size
   end
-
   def extract_block(port,timeout = nil)
     block_data = []
     get_size_a = [0] 
     @data_locks[port].synchronize do
       tgr_data = @data[port]
+      timing = Timing.start
       if tgr_data.empty?
+        #puts "Wait at #{Time.now.to_f}" if @active
         @cond_var[port].wait(@data_locks[port],timeout)
         tgr_data = @data[port]
+        #puts "Wake at #{Time.now.to_f}" if @active
       end
+      #puts "BUF Block extract delay: #{timing.end} ms" if @active
       if !tgr_data.empty?
         tgr_size = tgr_data.size
         get_size_a[0] = [tgr_size,CLI_ACK_SLICE_PKT].min
@@ -244,6 +329,28 @@ class PacketBuffer
     stop_go_check
     block_data
   end
+
+=begin
+  def extract_block(port,timeout = nil)
+    block_data = []
+    added = 0
+    timing = Timing.start
+    while block_data.empty?
+      @data_locks[port].synchronize do
+        block_data += @data[port]
+        added += @data[port].size
+        @data[port] = []
+      end
+      sleep 0.001
+    end
+    puts "Extract Delay: #{timing.end} ms" if @active
+    @available += added
+    add_free_token(added)
+    @total_rx[port] += PACKET_SIZE * block_data.size
+    stop_go_check
+    block_data
+  end
+=end
 
   def add_free_token(token)
     @token_lock.synchronize do

@@ -39,9 +39,13 @@ def run_port_thread(port)
 end
 
 def run_read_thread
-  thr = Thread.new do
-    $pkt_buf.run_receive_loop
+  thrs = []
+  SERVER_OPEN_PORT_RANGE.each do |port|
+    thrs << Thread.new do
+      $pkt_buf.run_receive_loop_port(port)
+    end
   end
+  thrs
 end
 def run_control_thread
   thr = Thread.new do

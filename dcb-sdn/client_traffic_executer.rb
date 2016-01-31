@@ -46,7 +46,7 @@ end
 # Pkt Buffer: read loop
 # ///////////
 $thr_read = Thread.new do
-  $pkt_buf.run_receive_loop
+  $pkt_buf.run_receive_loop_port($port)
 end
 
 # ///////////
