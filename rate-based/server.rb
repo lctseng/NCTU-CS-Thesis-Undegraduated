@@ -8,7 +8,7 @@ require 'qos-lib'
 require 'common'
 require 'sender_process'
 
-STATISTIC_INTERVAL = 0.2
+STATISTIC_INTERVAL = 0.5
 IO_TYPE_NAME = {
   nil => " ",
   1 => "L",
