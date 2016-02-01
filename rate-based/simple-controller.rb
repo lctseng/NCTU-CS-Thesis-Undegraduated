@@ -88,14 +88,14 @@ end
 # Remove a sender process
 def remove_sender_process(sender_process)
   # Remove Entry
-  $senders_id_lock.synchronize do
+  #$senders_id_lock.synchronize do
     $senders_by_id.delete(sender_process.id)
     $senders_id_list.delete(sender_process.id)
-  end
-  $senders_sock_lock.synchronize do
+  #end
+  #$senders_sock_lock.synchronize do
     $senders_by_sock.delete(sender_process.sock)
     $senders_sock_list.delete(sender_process.sock)
-  end
+  #end
   # Redeem speed 
   redeem_speed_from(sender_process)
   # Redistribute
@@ -196,6 +196,8 @@ $switches_id_lock = Mutex.new
 $switches_sock_lock = Mutex.new
 $senders_sock_lock = Mutex.new
 
+$sender_lock = Mutex.new
+
 $switches_speed_assign_lock = Mutex.new
 
 
@@ -215,13 +217,15 @@ $thr_accept = Thread.new do
     case msg.src_type
     when ControlMessage::TYPE_HOST
       info = SenderProcessInfo.new(msg.id,new_sock)
-      $senders_id_lock.synchronize do
-        $senders_by_id[msg.id] = info
-        $senders_id_list << msg.id
-      end
-      $senders_sock_lock.synchronize do
-        $senders_by_sock[new_sock] = info
-        $senders_sock_list << new_sock
+      $sender_lock.synchronize do
+        $senders_id_lock.synchronize do
+          $senders_by_id[msg.id] = info
+          $senders_id_list << msg.id
+        end
+        $senders_sock_lock.synchronize do
+          $senders_by_sock[new_sock] = info
+          $senders_sock_list << new_sock
+        end
       end
       flows = PACKET_FLOWS_SW_ONLY[msg.id]
       add_assign_speed_for_flows(flows,info.spd)
@@ -276,24 +280,26 @@ $thr_sw_scan = Thread.new do
         #puts "Limit Diff: #{diff_spd.mbps}"
         #puts "Limit change: #{change_spd.mbps}"
       end
-      $senders_id_lock.synchronize do
-        hosts = SWITCH_PORT_PASSING_HOST[sw_id] & $senders_id_list
-        if bias
-          total_speed = hosts.inject(0) {|r,host_id| r += $senders_by_id[host_id].spd.pkti}
-        else
-          divided_change_spd = change_spd / hosts.size
-        end
-        hosts.each do |host_id|
+      $sender_lock.synchronize do
+        $senders_id_lock.synchronize do
+          hosts = SWITCH_PORT_PASSING_HOST[sw_id] & $senders_id_list
           if bias
-            host_change_spd = change_spd * ($senders_by_id[host_id].spd.pkti / total_speed)
+            total_speed = hosts.inject(0) {|r,host_id| r += $senders_by_id[host_id].spd.pkti}
           else
-            host_change_spd = divided_change_spd 
+            divided_change_spd = change_spd / hosts.size
           end
-          if !host_change.has_key?(host_id) || host_change[host_id] > host_change_spd
-            host_change[host_id] = host_change_spd
+          hosts.each do |host_id|
+            if bias
+              host_change_spd = change_spd * ($senders_by_id[host_id].spd.pkti / total_speed)
+            else
+              host_change_spd = divided_change_spd 
+            end
+            if !host_change.has_key?(host_id) || host_change[host_id] > host_change_spd
+              host_change[host_id] = host_change_spd
+            end
           end
         end
-      end
+      end 
     end # end each switch
     #puts "Host changes:#{host_change.inspect}"
     apply_host_speed_change_data(host_change)
@@ -325,15 +331,38 @@ end
 # Sender Reader 
 $thr_sender_reader = Thread.new do
   loop do
+    sleep 0.001
+    $sender_lock.synchronize do
+      $senders_sock_list.each do |sock|
+        begin
+          msg = sock.recv_nonblock(PACKET_SIZE)  #=> ["aaa", ["AF_INET", 33302, "localhost.localdomain", "127.0.0.1"]]
+          if msg.empty?
+            info = $senders_by_sock[sock]
+            puts "Closed Sock: #{info.id}"
+            remove_sender_process(info)
+          end
+        rescue Errno::ECONNRESET
+            info = $senders_by_sock[sock]
+            puts "Closed Reset Sock: #{info.id}"
+            remove_sender_process(info)
+        rescue IO::WaitReadable
+          next
+        end
+      end
+    end
+=begin
     while $senders_sock_list.empty?
       sleep 0.1
     end
     ready = IO.select($senders_sock_list,[],[],0.01)
-    next if !ready
+    if !ready
+      next
+    end
     ready[0].each do |sock|
       info = $senders_by_sock[sock]
       remove_sender_process(info)
     end
+=end
   end
 end
 

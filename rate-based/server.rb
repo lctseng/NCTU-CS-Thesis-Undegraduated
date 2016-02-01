@@ -158,8 +158,11 @@ def run_recv_loop(pkt_handler,ack_req)
     else
       if loss
         puts "LOSS!!!"
+        sub_buf.each_with_index do |r,i|
+          puts i if !r
+        end
       end
-      task_n += 1
+      break
     end
     if !loss && done
       #puts "DONE"

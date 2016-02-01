@@ -122,7 +122,7 @@ if $command == "write"
       if done
         $stop = true
       end
-      i += 1
+      break
     end
     if $stop
       break
@@ -131,7 +131,7 @@ if $command == "write"
 
 
   ###
-
+  puts "Exiting"
   $sender_control.exit
   $sender.close
 
