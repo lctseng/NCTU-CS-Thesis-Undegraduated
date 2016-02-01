@@ -10,7 +10,7 @@ require 'packet_buffer'
 require 'packet_handler'
 require 'control_api'
 
-STATISTIC_INTERVAL = 0.2
+STATISTIC_INTERVAL = 0.5
 
 
 SERVER_OPEN_PORT_RANGE = 5001..5008

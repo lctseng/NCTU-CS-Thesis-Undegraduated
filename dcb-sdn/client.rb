@@ -8,6 +8,7 @@ $host = ARGV[1]
 $port = ARGV[2].to_i
 $host_ip = ARGV[3]
 
+start = Time.now
 File.open("pattern/client_#{$port}.pattern") do |f|
   while line = f.gets
     data = line.split
@@ -24,4 +25,4 @@ File.open("pattern/client_#{$port}.pattern") do |f|
     end
   end
 end
-puts "Client exiting"
+puts "Client exiting, Elapse: #{Time.now - start}"

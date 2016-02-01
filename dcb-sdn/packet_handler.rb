@@ -49,7 +49,7 @@ class PacketHandler
   def get_token(min,max)
     call_time = Time.now
     @token_getter.get_token(self,min,max)
-    printf("Token Delay: %7.3f ms\n",(Time.now - call_time)*1000) if @pkt_buf.active
+    #printf("Token Delay: %7.3f ms\n",(Time.now - call_time)*1000) if @pkt_buf.active
   end
 
   def restore_token(n)
