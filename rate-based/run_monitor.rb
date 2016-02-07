@@ -2,9 +2,32 @@
 
 require_relative 'config'
 require 'qos-info'
+require 'thread'
+require 'common'
 
 pipes = {}
 children = {}
+
+
+# Record Controller Traffic
+thr_ctrl_traffic = Thread.new do
+  file = File.new("log/ctrl_traffic","w")
+  interval = IntervalWait.new
+  last = 0
+  loop do
+    interval.sleep 1
+    IO.popen("ovs-ofctl dump-flows s1 | grep cookie=0x0 | grep tp_dst=#{RATE_BASED_CTRL_PORT}") do |result| 
+      str = result.read
+      if str =~ /n_bytes=(\d+)/
+        current = $1.to_i
+        diff = current - last
+        last = current
+        spd = diff
+        file.puts "#{Time.now.to_f} #{spd}"
+      end
+    end
+  end
+end
 
 # Fork all monitors
 switches = []

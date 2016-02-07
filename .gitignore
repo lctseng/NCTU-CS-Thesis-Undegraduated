@@ -14,5 +14,10 @@ switch_*.json
 *.json.tar.gz
 archive/
 
+*/log/client_*
+*/log/total*
+*/log/ctrl_traffic
+*/log/*.tar
+
 # Temp files
 tmp/

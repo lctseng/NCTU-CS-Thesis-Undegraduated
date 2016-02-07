@@ -243,6 +243,8 @@ class PassivePacketHandler < PacketHandler
         i += 1
       end
       if stop
+        restore_token(@token)
+        @token = 0
         break
       end
     end
@@ -259,7 +261,7 @@ class PassivePacketHandler < PacketHandler
     # Reply Ack
     if DCB_SENDER_REQUIRE_ACK
       req_to_reply(ack_req)
-      ensure_token(1,1)
+      ensure_token(1,100)
       #ensure_token(1,1)
       @token -= 1
       sz = write_packet_req(ack_req,*pkt[:peer])
@@ -359,7 +361,7 @@ class PassivePacketHandler < PacketHandler
           sleep io_time
           sub_size = new_sub_size
         end
-        ensure_token(1,1)
+        ensure_token(1,100)
         @token -= 1
         write_packet_req(data_ack_req,*data_ack_pkt[:peer])
         if !TRAFFIC_COUNT_ACK
@@ -367,6 +369,8 @@ class PassivePacketHandler < PacketHandler
         end
       end
       if !loss && done
+        restore_token(@token)
+        @token = 0
         #puts "DONE"
         break
       end
@@ -522,6 +526,7 @@ class ActivePacketHandler < PacketHandler
         write_packet_req(data_ack_req)
       end
       if !loss && done
+        restore_token(@token)
         puts "DONE"
         Process.kill("INT",Process.pid)
         break
@@ -565,7 +570,12 @@ class ActivePacketHandler < PacketHandler
       done = false
       if DCB_SENDER_REQUIRE_ACK
         min = sub_size +  DCB_SDN_EXTRA_TOKEN_USED
-        ensure_token(min,min)
+        if min < 100
+          max = 100
+        else
+          max = min
+        end
+        ensure_token(min,max)
       else
         remain = sub_size
         interval_get = (sub_size / 10.0).ceil

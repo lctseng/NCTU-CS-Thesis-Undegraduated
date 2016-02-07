@@ -22,6 +22,13 @@ SERVER_OPEN_PORT_RANGE = 5001..5008
 #SERVER_OPEN_PORT_RANGE = 5008..5008
 #SERVER_OPEN_PORT_RANGE = 5005..5008
 
+# Open files
+$f_total = File.open("log/total","w")
+$f_client = {}
+SERVER_OPEN_PORT_RANGE.each do |port|
+  $f_client[port] = File.open("log/client_#{port}","w")
+end
+
 if SERVER_RANDOM_FIXED_SEED
   srand(0)
 end
@@ -343,6 +350,7 @@ else
   begin
     interval = IntervalWait.new
     loop do
+      now_float = Time.now.to_f
       interval.sleep STATISTIC_INTERVAL
       total_rx_diff = 0
       total_tx_diff = 0
@@ -359,6 +367,7 @@ else
         else
           rx_loss_rate = 0.0
         end
+        rx_spd = rx_diff * 8.0 / UNIT_MEGA / STATISTIC_INTERVAL
 
         # TX
         cur_tx = $total_tx[port]
@@ -371,15 +380,20 @@ else
         else
           tx_loss_rate = 0.0
         end
+        tx_spd = tx_diff * 8.0 / UNIT_MEGA / STATISTIC_INTERVAL
 
         text = "#{port}:#{IO_TYPE_NAME[$io_types[port]]}:"
         text += sprintf("[RX]總:%11.3f Mbit，",cur_rx * 8.0 / UNIT_MEGA)
-        text += "區:#{(sprintf("%8.3f",rx_diff * 8.0 / UNIT_MEGA / STATISTIC_INTERVAL))} Mbit，遺失:#{sprintf(" %8.4f%%",rx_loss_rate)} "
+        text += "區:#{(sprintf("%8.3f",rx_spd))} Mbit，遺失:#{sprintf(" %8.4f%%",rx_loss_rate)} "
         text += sprintf("[TX]總:%11.3f Mbit，",cur_tx * 8.0 / UNIT_MEGA)
-        text += "區:#{(sprintf("%8.3f",tx_diff * 8.0 / UNIT_MEGA / STATISTIC_INTERVAL))} Mbit，遺失:#{sprintf(" %8.4f%%",tx_loss_rate)} "
+        text += "區:#{(sprintf("%8.3f",tx_spd))} Mbit，遺失:#{sprintf(" %8.4f%%",tx_loss_rate)} "
         texts << text
+        $f_client[port].puts "#{now_float} #{rx_spd}"
       end
-      printf("===Spd:[RX] %8.3f Mbit [TX] %8.3f Mbit \n",total_rx_diff * 8.0 / UNIT_MEGA / STATISTIC_INTERVAL,total_tx_diff * 8.0 / UNIT_MEGA / STATISTIC_INTERVAL)
+      total_tx_spd = total_rx_diff * 8.0 / UNIT_MEGA / STATISTIC_INTERVAL
+      total_rx_spd = total_rx_diff * 8.0 / UNIT_MEGA / STATISTIC_INTERVAL
+      $f_total.puts "#{now_float} #{total_rx_spd}"
+      printf("===Spd:[RX] %8.3f Mbit [TX] %8.3f Mbit \n",total_rx_spd,total_tx_spd)
       final = ""
       texts.each do |text|
         final += text+"\n"

@@ -94,6 +94,8 @@ QOS_INFO.each_pair do |port,data|
   end
   shell_exec("ovs-ofctl add-flow #{sw} priority=0,actions=CONTROLLER:65535")
 end
+shell_exec("ovs-ofctl add-flow s1 priority=1,tcp,tp_dst=10100,actions=output:4")
+shell_exec("ovs-ofctl add-flow s1 priority=1,tcp,tp_dst=10200,actions=output:4")
 
 FIXED_FLOW_ENTRY.each do |entry|
   puts "新增額外entry：#{entry}"
