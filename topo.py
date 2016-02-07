@@ -130,7 +130,7 @@ class MyLinearTopo( Topo ):
 
 
 def CreateNet( **kwargs ):
-    topo = MyLinearTopo(k=4,n=2,delay=None)
+    topo = MyLinearTopo(k=5,n=2,delay=None)
     return Mininet( topo, **kwargs )
 
 def connectToRootNS( network, switch, ip, routes ):

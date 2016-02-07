@@ -121,12 +121,14 @@ PASSIVE_PORT_TO_IP = {
   5005 => '172.16.0.5',
   5006 => '172.16.0.6',
   5007 => '172.16.0.7',
-  5008 => '172.16.0.8'
+  5008 => '172.16.0.8',
+  5009 => '172.16.0.9',
+  5010 => '172.16.0.10'
 }
 
 # QoS資料
 QOS_INFO = {}
-def add_qos_info(sw,eth,ingress_list,udp_port = 5001..5008)
+def add_qos_info(sw,eth,ingress_list,udp_port = 5001..5010)
   QOS_INFO["#{sw}-eth#{eth}"] = {eth: eth,ingress_list: ingress_list,sw: sw,udp_port: udp_port}
 end
 
@@ -308,6 +310,131 @@ when /linearTopoK4N2-multi/i
     "#{HOST[1]}:5001" => ["s2-eth3","s1-eth1",HOST[1]],
     "#{HOST[5]}:5005" => ["s2-eth3","s1-eth2",HOST[5]]
 
+  }
+
+# linear k = 5 ,n = 2
+when /linearTopoK5N2-multi/i
+  # Forward
+  # Blue
+  _ports = [5006,5008,5009,5010]
+  add_qos_info('s1','1',[2,3],_ports)
+  add_qos_info('s2','3',[4]  ,_ports)
+  add_qos_info('s3','3',[2,4],_ports)
+  add_qos_info('s4','3',[2,4],_ports)
+  add_qos_info('s5','3',[2]  ,_ports)
+  # Red
+  _ports = [5003,5004,5005,5007]
+  add_qos_info('s2','1',[2,4]  ,_ports)
+  add_qos_info('s3','3',[1,4],_ports)
+  add_qos_info('s4','3',[1,4],_ports)
+  add_qos_info('s5','3',[1]  ,_ports)
+
+  # Backward
+  # Blue
+  _ports = [5006]
+  add_qos_info('s1','2',[1],_ports)
+  _ports = [5008,5009,5010]
+  add_qos_info('s1','3',[1],_ports)
+  add_qos_info('s2','4',[3],_ports)
+  _ports = [5008]
+  add_qos_info('s3','2',[3],_ports)
+  _ports = [5009,5010]
+  add_qos_info('s3','4',[3],_ports)
+  _ports = [5009]
+  add_qos_info('s4','2',[3],_ports)
+  _ports = [5010]
+  add_qos_info('s4','4',[3],_ports)
+  add_qos_info('s5','2',[3],_ports)
+
+  # Red
+  _ports = [5007]
+  add_qos_info('s2','2',[1],_ports)
+  _ports = [5003,5004,5005]
+  add_qos_info('s2','4',[1],_ports)
+  _ports = [5003]
+  add_qos_info('s3','1',[3],_ports)
+  _ports = [5004,5005]
+  add_qos_info('s3','4',[3],_ports)
+  _ports = [5004]
+  add_qos_info('s4','1',[3],_ports)
+  _ports = [5005]
+  add_qos_info('s4','4',[3],_ports)
+  add_qos_info('s5','1',[3],_ports)
+  
+=begin
+  UPSTREAM_INFO = {
+    "s1-eth3" => [HOST[1],HOST[5]],
+    "s2-eth1" => [HOST[3],HOST[4],HOST[7],HOST[8]],
+    "s2-eth2" => [HOST[1],HOST[5]],
+    "s3-eth3" => [HOST[3],HOST[4],HOST[7],HOST[8]],
+    "s4-eth3" => [HOST[4],HOST[8]]
+
+  }
+  UPSTREAM_SWITCH = {
+    "s2-eth1" => ["s3-eth3","s4-eth3"],
+    "s2-eth2" => ["s1-eth3"],
+    "s3-eth3" => ["s4-eth3"]
+  }
+=end
+  STARTING_ORDER = ["s1-eth1","s2-eth3","s3-eth3","s4-eth3","s5-eth3", # Blue Forward
+                    "s2-eth1", # Red Forward
+                    "s5-eth2","s4-eth4","s4-eth2","s3-eth4","s3-eth2","s2-eth4","s1-eth3","s1-eth2", # Blue Backward
+                    "s5-eth1","s4-eth1","s3-eth1","s2-eth2",
+                   ]
+  RECEIVER_HOSTS = {
+    HOST[1] => [HOST[6],HOST[8],HOST[9],HOST[10]],
+    HOST[2] => [HOST[3],HOST[4],HOST[5],HOST[7]],
+  }
+  # define senders
+  PACKET_SENDERS = {
+    # Forward
+    # Blue
+    "#{HOST[1]}:5006" => HOST[6],
+    "#{HOST[1]}:5008" => HOST[8],
+    "#{HOST[1]}:5009" => HOST[9],
+    "#{HOST[1]}:5010" => HOST[10],
+    # Red
+    "#{HOST[2]}:5003" => HOST[3],
+    "#{HOST[2]}:5004" => HOST[4],
+    "#{HOST[2]}:5005" => HOST[5],
+    "#{HOST[2]}:5007" => HOST[7],
+    # Backward
+    # Blue
+    "#{HOST[6]}:5006"  => HOST[1],
+    "#{HOST[8]}:5008"  => HOST[1],
+    "#{HOST[9]}:5009"  => HOST[1],
+    "#{HOST[10]}:5010" => HOST[1],
+    # Red
+    "#{HOST[3]}:5003"  => HOST[2],
+    "#{HOST[4]}:5004"  => HOST[2],
+    "#{HOST[5]}:5005"  => HOST[2],
+    "#{HOST[7]}:5007"  => HOST[2],
+  }
+  # define packet flow
+  PACKET_FLOWS = {
+    # Forward
+    # Blue
+    "#{HOST[1]}:5006" => ["s1-eth1",HOST[1]],
+    "#{HOST[1]}:5008" => ["s3-eth3","s2-eth3","s1-eth1",HOST[1]],
+    "#{HOST[1]}:5009" => ["s4-eth3","s3-eth3","s2-eth3","s1-eth1",HOST[1]],
+    "#{HOST[1]}:5010" => ["s5-eth3","s4-eth3","s3-eth3","s2-eth3","s1-eth1",HOST[1]],
+    # Red
+    "#{HOST[2]}:5007" => ["s2-eth1",HOST[2]],
+    "#{HOST[2]}:5003" => ["s3-eth3","s2-eth1",HOST[2]],
+    "#{HOST[2]}:5004" => ["s4-eth3","s3-eth3","s2-eth1",HOST[2]],
+    "#{HOST[2]}:5005" => ["s5-eth3","s4-eth3","s3-eth3","s2-eth1",HOST[2]],
+
+    # Backward
+    # Blue
+    "#{HOST[6]}:5006"  => ["s1-eth2",HOST[6]],
+    "#{HOST[8]}:5008"  => ["s1-eth3","s2-eth4","s3-eth2",HOST[8]],
+    "#{HOST[9]}:5009"  => ["s1-eth3","s2-eth4","s3-eth4","s4-eth2",HOST[9]],
+    "#{HOST[10]}:5010" => ["s1-eth3","s2-eth4","s3-eth4","s4-eth4","s5-eth2",HOST[10]],
+    # Red
+    "#{HOST[7]}:5007"  => ["s2-eth2",HOST[7]],
+    "#{HOST[3]}:5003"  => ["s2-eth4","s3-eth1",HOST[3]],
+    "#{HOST[4]}:5004"  => ["s2-eth4","s3-eth4","s4-eth1",HOST[4]],
+    "#{HOST[5]}:5005"  => ["s2-eth4","s3-eth4","s4-eth4","s5-eth1",HOST[5]],
   }
 
 when /linearTopoK4N2-single/i

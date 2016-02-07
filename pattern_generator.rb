@@ -245,24 +245,24 @@ def generate_by_patching_files(f,pattern_time)
 end
 
 def generate_long_flow(f,pattern_time)
-  f.puts 1000*UNIT_MEGA
+  f.puts "write #{1000*UNIT_MEGA} 1"
 end
 
 def generate_pattern(out_name,pattern_time)
   File.open(sprintf(CLIENT_PATTERN_NAME_FORMAT,out_name),'w') do |f|
-    generate_nfs_bursty_pattern(f,pattern_time)
+    #generate_nfs_bursty_pattern(f,pattern_time)
     #generate_test_pattern(f,pattern_time)
     #generate_default_pattern(f,pattern_time)
     #generate_elephant_pattern(f,pattern_time)
     #generate_elephant_long_sleep_pattern(f,pattern_time,{long_time: 10,long_rate: 0.01,large_rate: 0.5,small_rate: 0.9}) 
     #generate_bursty_pattern(f,pattern_time)
     #generate_by_patching_files(f,pattern_time)
-    #generate_long_flow(f,pattern_time)
+    generate_long_flow(f,pattern_time)
   end
 end
 
 if out_name == "all"
-  for out_name in 5001..5008
+  for out_name in 5001..5010
     generate_pattern(out_name,pattern_time)
   end
 else
