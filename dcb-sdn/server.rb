@@ -9,8 +9,9 @@ require 'qos-lib'
 require 'packet_buffer'
 require 'packet_handler'
 require 'control_api'
+require 'common'
 
-STATISTIC_INTERVAL = 1
+STATISTIC_INTERVAL = 0.5
 
 
 SERVER_OPEN_PORT_RANGE = 5001..5010
@@ -65,9 +66,9 @@ if pid = fork
   loop do
     data = []
     if !$quiet
-    SERVER_OPEN_PORT_RANGE.each do 
-      data << pipe_r.gets
-    end
+      SERVER_OPEN_PORT_RANGE.each do 
+        data << pipe_r.gets
+      end
     end
     data << pipe_r.gets
     data.each do |str|
@@ -77,13 +78,13 @@ if pid = fork
 else
   pipe_r.close
   $stdout.reopen pipe_w
-  
+
   $pkt_buf = PacketBuffer.new($host_ip,$host_ip,SERVER_OPEN_PORT_RANGE)
 
   holder_list = TARGET_HOSTS_ID[$host_ip].join(',') # who will you send?
   $control_api = ControlAPI.new($host_ip,$host_ip,holder_list)
   $pkt_buf.register_control_api($control_api)
- 
+
   # ///////////
   # Control Loop
   # ///////////
@@ -111,7 +112,7 @@ else
   # Pkt Buffer: read loop
   # ///////////
   thr_read = run_read_thread
-  
+
   # ///////////
   # Pkt Handler: per-port loop
   # ///////////
@@ -133,50 +134,50 @@ else
   total_rx_diff = 0
   total_tx_diff = 0
   begin
+    interval = IntervalWait.new
     loop do
       now = Time.now
       now_float = now.to_f
-      if now - last_time > STATISTIC_INTERVAL
-        total_rx_diff = 0
-        total_tx_diff = 0
-        texts = []
-        last_time = Time.now
-        (SERVER_OPEN_PORT_RANGE).each do |port|
-          # RX
-          cur_rx = $pkt_buf.total_rx[port]
-          rx_diff = cur_rx - last_rx_size[port]
-          total_rx_diff += rx_diff
-          last_rx_size[port] = cur_rx
-          rx_loss = $pkt_buf.total_rx_loss[port]
-          if cur_rx > 0
-            rx_loss_rate = rx_loss * PACKET_SIZE * 100.0 / (cur_rx + rx_loss * PACKET_SIZE)
-          else
-            rx_loss_rate = 0.0
-          end
-          rx_spd = rx_diff * 8.0 / UNIT_MEGA / STATISTIC_INTERVAL
-  
-          # TX
-          cur_tx = $pkt_buf.total_tx[port]
-          tx_diff = cur_tx - last_tx_size[port]
-          total_tx_diff += tx_diff
-          last_tx_size[port] = cur_tx
-          tx_loss = $pkt_buf.total_tx_loss[port]
-          if cur_tx > 0
-            tx_loss_rate = tx_loss * PACKET_SIZE * 100.0 / (cur_tx + tx_loss * PACKET_SIZE)
-          else
-            tx_loss_rate = 0.0
-          end
-          tx_spd = tx_diff * 8.0 / UNIT_MEGA / STATISTIC_INTERVAL
 
-          text = "#{port}:"
-          text += sprintf("[RX]總:%11.3f Mbit，",cur_rx * 8.0 / UNIT_MEGA)
-          text += "區:#{(sprintf("%8.3f",rx_spd))} Mbit，遺失:#{sprintf(" %8.4f%%",rx_loss_rate)} "
-          text += sprintf("[TX]總:%11.3f Mbit，",cur_tx * 8.0 / UNIT_MEGA)
-          text += "區:#{(sprintf("%8.3f",tx_spd))} Mbit，遺失:#{sprintf(" %8.4f%%",tx_loss_rate)} "
-          texts << text if !$quiet
-
-          $f_client[port].puts "#{now_float} #{rx_spd}"
+      total_rx_diff = 0
+      total_tx_diff = 0
+      texts = []
+      last_time = Time.now
+      (SERVER_OPEN_PORT_RANGE).each do |port|
+        # RX
+        cur_rx = $pkt_buf.total_rx[port]
+        rx_diff = cur_rx - last_rx_size[port]
+        total_rx_diff += rx_diff
+        last_rx_size[port] = cur_rx
+        rx_loss = $pkt_buf.total_rx_loss[port]
+        if cur_rx > 0
+          rx_loss_rate = rx_loss * PACKET_SIZE * 100.0 / (cur_rx + rx_loss * PACKET_SIZE)
+        else
+          rx_loss_rate = 0.0
         end
+        rx_spd = rx_diff * 8.0 / UNIT_MEGA / STATISTIC_INTERVAL
+
+        # TX
+        cur_tx = $pkt_buf.total_tx[port]
+        tx_diff = cur_tx - last_tx_size[port]
+        total_tx_diff += tx_diff
+        last_tx_size[port] = cur_tx
+        tx_loss = $pkt_buf.total_tx_loss[port]
+        if cur_tx > 0
+          tx_loss_rate = tx_loss * PACKET_SIZE * 100.0 / (cur_tx + tx_loss * PACKET_SIZE)
+        else
+          tx_loss_rate = 0.0
+        end
+        tx_spd = tx_diff * 8.0 / UNIT_MEGA / STATISTIC_INTERVAL
+
+        text = "#{port}:"
+        text += sprintf("[RX]總:%11.3f Mbit，",cur_rx * 8.0 / UNIT_MEGA)
+        text += "區:#{(sprintf("%8.3f",rx_spd))} Mbit，遺失:#{sprintf(" %8.4f%%",rx_loss_rate)} "
+        text += sprintf("[TX]總:%11.3f Mbit，",cur_tx * 8.0 / UNIT_MEGA)
+        text += "區:#{(sprintf("%8.3f",tx_spd))} Mbit，遺失:#{sprintf(" %8.4f%%",tx_loss_rate)} "
+        texts << text if !$quiet
+
+        $f_client[port].puts "#{now_float} #{rx_spd}"
       end
       current_q = DCB_SERVER_BUFFER_PKT_SIZE - $pkt_buf.available
       q_rate = (current_q * 100.0)/DCB_SERVER_BUFFER_PKT_SIZE
@@ -189,7 +190,7 @@ else
         final += text+"\n"
       end
       print final
-      sleep [STATISTIC_INTERVAL / 2.0,0.1].max
+      interval.sleep STATISTIC_INTERVAL
     end
   rescue SystemExit, Interrupt
     puts "server結束"
