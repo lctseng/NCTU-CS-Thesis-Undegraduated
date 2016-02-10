@@ -13,7 +13,7 @@ server_ip = ARGV[0]
 abort if server_ip.nil?
 
 # Fork all monitors
-for n in [3,4,7,8]
+for n in [6,8,9,10]
   ip = "172.16.0.#{n}"
   port = 5000 + n
   puts "Starting:#{ip}"

@@ -16,18 +16,12 @@ IO_TYPE_NAME = {
   3 => "N",
 }
 
-SERVER_OPEN_PORT_RANGE = 5001..5008
+SERVER_OPEN_PORT_RANGE = 5001..5010
 #SERVER_OPEN_PORT_RANGE = 5005..5005
 #SERVER_OPEN_PORT_RANGE = 5002..5002
 #SERVER_OPEN_PORT_RANGE = 5008..5008
 #SERVER_OPEN_PORT_RANGE = 5005..5008
 
-# Open files
-$f_total = File.open("log/total","w")
-$f_client = {}
-SERVER_OPEN_PORT_RANGE.each do |port|
-  $f_client[port] = File.open("log/client_#{port}","w")
-end
 
 if SERVER_RANDOM_FIXED_SEED
   srand(0)
@@ -37,6 +31,15 @@ $host_ip = ARGV[1]
 if !$host_ip
   puts "Host IP required"
   exit
+end
+$quiet = ARGV[2] == "--quiet"
+
+# Open files
+`mkdir -p log/#{$host_ip}`
+$f_total = File.open("log/#{$host_ip}/total","w")
+$f_client = {}
+SERVER_OPEN_PORT_RANGE.each do |port|
+  $f_client[port] = File.open("log/#{$host_ip}/client_#{port}","w")
 end
 
 
@@ -69,6 +72,7 @@ def run_recv_loop(pkt_handler,ack_req)
     # Sub data buffer
     sub_buf = [false] * sub_size
     #loss = rand > 0.9
+    loop_timing = Timing.new
     while sub_n < sub_size
       data_req = parse_command(pkt_handler.recv(PACKET_SIZE))
       current_read += PACKET_SIZE
@@ -108,6 +112,7 @@ def run_recv_loop(pkt_handler,ack_req)
         $total_rx[port] += PACKET_SIZE
       end
     end
+    #puts "Loop Delay: #{loop_timing.end}"
     #puts "Done with sub_n = #{sub_n} , sz = #{sub_buf.size}"
     # 檢查sub buf 
     if sub_buf.all? {|v| v } && ( SERVER_LOSS_RATE == 0.0 || rand > SERVER_LOSS_RATE )
@@ -164,10 +169,11 @@ def run_recv_loop(pkt_handler,ack_req)
       end
     else
       if loss
-        puts "LOSS!!!"
+        cnt = 0
         sub_buf.each_with_index do |r,i|
-          puts i if !r
+          cnt += 1 if !r
         end
+        $total_rx_loss[port] += cnt
       end
       break
     end
@@ -301,8 +307,10 @@ pipe_r,pipe_w = IO.pipe
 if pid = fork
   loop do
     data = []
-    SERVER_OPEN_PORT_RANGE.each do 
-      data << pipe_r.gets
+    if !$quiet
+      SERVER_OPEN_PORT_RANGE.each do 
+        data << pipe_r.gets
+      end
     end
     data << pipe_r.gets
 
@@ -387,10 +395,10 @@ else
         text += "區:#{(sprintf("%8.3f",rx_spd))} Mbit，遺失:#{sprintf(" %8.4f%%",rx_loss_rate)} "
         text += sprintf("[TX]總:%11.3f Mbit，",cur_tx * 8.0 / UNIT_MEGA)
         text += "區:#{(sprintf("%8.3f",tx_spd))} Mbit，遺失:#{sprintf(" %8.4f%%",tx_loss_rate)} "
-        texts << text
+        texts << text if !$quiet
         $f_client[port].puts "#{now_float} #{rx_spd}"
       end
-      total_tx_spd = total_rx_diff * 8.0 / UNIT_MEGA / STATISTIC_INTERVAL
+      total_tx_spd = total_tx_diff * 8.0 / UNIT_MEGA / STATISTIC_INTERVAL
       total_rx_spd = total_rx_diff * 8.0 / UNIT_MEGA / STATISTIC_INTERVAL
       $f_total.puts "#{now_float} #{total_rx_spd}"
       printf("===Spd:[RX] %8.3f Mbit [TX] %8.3f Mbit \n",total_rx_spd,total_tx_spd)

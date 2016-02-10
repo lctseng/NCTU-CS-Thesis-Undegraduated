@@ -13,18 +13,11 @@ require 'control_api'
 STATISTIC_INTERVAL = 1
 
 
-SERVER_OPEN_PORT_RANGE = 5001..5008
+SERVER_OPEN_PORT_RANGE = 5001..5010
 #SERVER_OPEN_PORT_RANGE = 5005..5005
 #SERVER_OPEN_PORT_RANGE = 5002..5002
 #SERVER_OPEN_PORT_RANGE = 5008..5008
 #SERVER_OPEN_PORT_RANGE = 5005..5008
-
-# Open files
-$f_total = File.open("log/total","w")
-$f_client = {}
-SERVER_OPEN_PORT_RANGE.each do |port|
-  $f_client[port] = File.open("log/client_#{port}","w")
-end
 
 if SERVER_RANDOM_FIXED_SEED
   srand(0)
@@ -35,6 +28,15 @@ if !$host_ip
   puts "Host IP required"
   exit
 end
+$quiet = ARGV[2] == "--quiet"
+# Open files
+`mkdir -p log/#{$host_ip}`
+$f_total = File.open("log/#{$host_ip}/total","w")
+$f_client = {}
+SERVER_OPEN_PORT_RANGE.each do |port|
+  $f_client[port] = File.open("log/#{$host_ip}/client_#{port}","w")
+end
+
 
 
 def run_port_thread(port)
@@ -62,8 +64,10 @@ pipe_r,pipe_w = IO.pipe
 if pid = fork
   loop do
     data = []
+    if !$quiet
     SERVER_OPEN_PORT_RANGE.each do 
       data << pipe_r.gets
+    end
     end
     data << pipe_r.gets
     data.each do |str|
@@ -169,7 +173,7 @@ else
           text += "區:#{(sprintf("%8.3f",rx_spd))} Mbit，遺失:#{sprintf(" %8.4f%%",rx_loss_rate)} "
           text += sprintf("[TX]總:%11.3f Mbit，",cur_tx * 8.0 / UNIT_MEGA)
           text += "區:#{(sprintf("%8.3f",tx_spd))} Mbit，遺失:#{sprintf(" %8.4f%%",tx_loss_rate)} "
-          texts << text
+          texts << text if !$quiet
 
           $f_client[port].puts "#{now_float} #{rx_spd}"
         end

@@ -9,14 +9,10 @@ children = {}
 last_str = {}
 
 $DEBUG = false
-server_ip = ARGV[0]
-if server_ip.nil?
-  puts "[Usage] ./run_client.rb <server_ip>"
-  exit
-end
 
 # Fork all monitors
-for n in [6,8,9,10]
+server_ip = "172.16.0.1"
+for n in [6,8,9]
   ip = "172.16.0.#{n}"
   port = 5000 + n
   puts "Starting:#{ip}"
@@ -29,7 +25,24 @@ for n in [6,8,9,10]
     # child
     #$stdin.reopen pipe[0]
     $stdout.reopen pipe[1]
-    Process.exec "ssh -t root@#{ip} 'cd monitor-mn/rate-based;ruby client.rb __last__ #{server_ip} #{port} #{ip}'"
+    Process.exec "ssh -t root@#{ip} 'cd monitor-mn/dcb-sdn;ruby client.rb __last__ #{server_ip} #{port} #{ip}'"
+  end
+end
+server_ip = "172.16.0.2"
+for n in [3,4,7]
+  ip = "172.16.0.#{n}"
+  port = 5000 + n
+  puts "Starting:#{ip}"
+  pipe = IO.pipe
+  if pid = fork
+    # parent
+    children[ip] =  pid
+    pipes[ip] = pipe
+  else
+    # child
+    #$stdin.reopen pipe[0]
+    $stdout.reopen pipe[1]
+    Process.exec "ssh -t root@#{ip} 'cd monitor-mn/dcb-sdn;ruby client.rb __last__ #{server_ip} #{port} #{ip}'"
   end
 end
 # Read from all 

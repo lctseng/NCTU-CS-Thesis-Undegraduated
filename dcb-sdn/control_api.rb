@@ -63,6 +63,7 @@ class ControlAPI
     # send message 
     str =  "GET_TOKEN #{Time.now.to_f} #{handler.id} #{min} #{max}"
     pad = ' '*(100-str.size)
+    #@req_time = Time.now
     @controller.send(str + pad,0)
     # sleep on cond var.
     handler.token_ready.wait(handler.token_lock)

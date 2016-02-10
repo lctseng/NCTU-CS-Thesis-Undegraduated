@@ -16,8 +16,15 @@ archive/
 
 */log/client_*
 */log/total*
+*/log/global*
 */log/ctrl_traffic
 */log/*.tar
+
+*/log/*/client_*
+*/log/*/total*
+*/log/*/global*
+*/log/*/ctrl_traffic
+*/log/*/*.tar
 
 # Temp files
 tmp/

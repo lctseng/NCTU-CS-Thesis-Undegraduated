@@ -245,7 +245,7 @@ def generate_by_patching_files(f,pattern_time)
 end
 
 def generate_long_flow(f,pattern_time)
-  f.puts "write #{1000*UNIT_MEGA} 1"
+  f.puts "write #{500*UNIT_MEGA} 1"
 end
 
 def generate_pattern(out_name,pattern_time)

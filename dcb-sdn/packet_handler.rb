@@ -1,3 +1,5 @@
+require_relative 'config'
+require 'common'
 class PacketHandler
 
   attr_reader :id
@@ -564,9 +566,12 @@ class ActivePacketHandler < PacketHandler
     send_and_wait_for_ack(init_req)
     @token -= 1
     # Start Data Packet
+    timing = Timing.new
     loop do
       current_send = 0
       last_time = Time.now
+      #puts "Delay: #{timing.end}"
+      timing.start
       done = false
       if DCB_SENDER_REQUIRE_ACK
         min = sub_size +  DCB_SDN_EXTRA_TOKEN_USED
@@ -582,6 +587,7 @@ class ActivePacketHandler < PacketHandler
         this_get = [interval_get,DCB_SDN_MAX_TOKEN_REQ,remain].min
         ensure_token(this_get,this_get)
       end
+      #puts "Token : #{timing.check}"
       sub_size.times do |j|
         if !DCB_SENDER_REQUIRE_ACK
           if @token <= 0
@@ -608,6 +614,7 @@ class ActivePacketHandler < PacketHandler
           break
         end
       end
+      #puts "Batch: #{timing.check}"
       if DCB_SENDER_REQUIRE_ACK
         @token -= sub_size
       end
@@ -615,7 +622,9 @@ class ActivePacketHandler < PacketHandler
         new_sub_size = get_sub_size(@io_type)
         ack_req[:sub_size] = new_sub_size
         @token -= 1
+        ack_timing = Timing.new
         reply_req = send_and_wait_for_ack(ack_req)
+        #puts "ACK Delay: #{ack_timing.end}"
         if reply_req[:extra] == "LOSS"
           @total_send += current_send
           done = false
@@ -638,6 +647,7 @@ class ActivePacketHandler < PacketHandler
         Process.kill("INT",Process.pid)
         break
       end
+      #puts "ACK: #{timing.end}"
     end
   end
 

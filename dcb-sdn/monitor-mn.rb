@@ -80,6 +80,7 @@ $monitor = SwitchMonitor.new($port)
 $monitor.add_token(DCB_SDN_MAX_SWITCH_QUEUE_LENGTH)
 
 last_sent = 0
+cnt = 0
 # 不斷取得queue len
 begin
   last_time = Time.now
@@ -93,8 +94,9 @@ begin
     if len >= 500
       puts "在#{Time.now.to_f}發起！" if DEBUG_TIMING
     end
-
-    if len >= 0 
+    cnt += 1
+    if cnt >= 10
+      cnt = 0
       # 畫圖
       bar_len = (len / 20.0).ceil
       printf("%5d,速度上限：%3d Mbits, 區間已送出: %4d,Queue:%s\n",len,data[:spd],sent_diff,"|"*bar_len) if MONITOR_SHOW_INFO

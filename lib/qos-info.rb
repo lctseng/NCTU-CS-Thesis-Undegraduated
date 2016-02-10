@@ -75,7 +75,7 @@ DCB_SERVER_BUFFER_GO_THRESHOLD = DCB_SERVER_BUFFER_PKT_SIZE * 0.5
 DCB_SIGNAL_SENDER_PORT = 9001
 DCB_PREMATURE_ACK = false # true is deprecated for DCB-SDN
 DCB_CEHCK_MAJOR_NUMBER = true
-DCB_SENDER_REQUIRE_ACK = false
+DCB_SENDER_REQUIRE_ACK = true
 
 # DCB-SDN
 DCB_SDN_PREMATURE_ACK = DCB_PREMATURE_ACK
@@ -96,15 +96,15 @@ RATE_BASED_CTRL_PORT = "10200"
 RATE_BASED_CTRL_MSG_LEN = 100
 
 
-RATE_BASED_WAIT_FOR_ACK = false
+RATE_BASED_WAIT_FOR_ACK = true
 
 RATE_BASED_SHOW_INTERVAL = 0.1
-RATE_BASED_SWITCH_MONITOR_INTERVAL = 0.01
+RATE_BASED_SWITCH_MONITOR_INTERVAL = 0.1
 
 RATE_BASED_SEND_INTERVAL = 0.005
 RATE_BASED_BASE_SPEED_PKTI = 0.05
 
-RATE_BASED_SWITCH_SCAN_INTERVAL = 0.01
+RATE_BASED_SWITCH_SCAN_INTERVAL = 0.1
 
 RATE_BASED_ASSIGN_RATE = 0.7
 
@@ -129,7 +129,21 @@ PASSIVE_PORT_TO_IP = {
 # QoS資料
 QOS_INFO = {}
 def add_qos_info(sw,eth,ingress_list,udp_port = 5001..5010)
-  QOS_INFO["#{sw}-eth#{eth}"] = {eth: eth,ingress_list: ingress_list,sw: sw,udp_port: udp_port}
+  key = "#{sw}-eth#{eth}"
+  if QOS_INFO.has_key? key
+    #puts "#{key} CONFLICT: #{ingress_list}:#{udp_port}, with:#{QOS_INFO[key]}"
+    # Check auto merge 
+    old_data = QOS_INFO[key]
+    if old_data[:ingress_list] == ingress_list
+      old_data[:udp_port] = udp_port.to_a + old_data[:udp_port].to_a
+      #puts "AUTO MERGED: #{old_data[:udp_port]}"
+      # Merge UDP PORT
+    else
+      #puts "CANNOT AUTO MERGE"
+    end
+  else
+    QOS_INFO[key] = {eth: eth,ingress_list: ingress_list,sw: sw,udp_port: udp_port}
+  end
 end
 
 LINK_DELAY = {}
@@ -319,15 +333,15 @@ when /linearTopoK5N2-multi/i
   _ports = [5006,5008,5009,5010]
   add_qos_info('s1','1',[2,3],_ports)
   add_qos_info('s2','3',[4]  ,_ports)
-  add_qos_info('s3','3',[2,4],_ports)
-  add_qos_info('s4','3',[2,4],_ports)
-  add_qos_info('s5','3',[2]  ,_ports)
+  add_qos_info('s3','3',[1,2,4],_ports) # M
+  add_qos_info('s4','3',[1,2,4],_ports) # M
+  add_qos_info('s5','3',[1,2]  ,_ports) # M
   # Red
   _ports = [5003,5004,5005,5007]
   add_qos_info('s2','1',[2,4]  ,_ports)
-  add_qos_info('s3','3',[1,4],_ports)
-  add_qos_info('s4','3',[1,4],_ports)
-  add_qos_info('s5','3',[1]  ,_ports)
+  add_qos_info('s3','3',[1,2,4],_ports) # M
+  add_qos_info('s4','3',[1,2,4],_ports) # M
+  add_qos_info('s5','3',[1,2]  ,_ports) # M
 
   # Backward
   # Blue
@@ -335,7 +349,7 @@ when /linearTopoK5N2-multi/i
   add_qos_info('s1','2',[1],_ports)
   _ports = [5008,5009,5010]
   add_qos_info('s1','3',[1],_ports)
-  add_qos_info('s2','4',[3],_ports)
+  add_qos_info('s2','4',[1,3],_ports) # M
   _ports = [5008]
   add_qos_info('s3','2',[3],_ports)
   _ports = [5009,5010]
@@ -350,7 +364,7 @@ when /linearTopoK5N2-multi/i
   _ports = [5007]
   add_qos_info('s2','2',[1],_ports)
   _ports = [5003,5004,5005]
-  add_qos_info('s2','4',[1],_ports)
+  add_qos_info('s2','4',[1,3],_ports) # M
   _ports = [5003]
   add_qos_info('s3','1',[3],_ports)
   _ports = [5004,5005]
@@ -436,6 +450,9 @@ when /linearTopoK5N2-multi/i
     "#{HOST[4]}:5004"  => ["s2-eth4","s3-eth4","s4-eth1",HOST[4]],
     "#{HOST[5]}:5005"  => ["s2-eth4","s3-eth4","s4-eth4","s5-eth1",HOST[5]],
   }
+  LINK_DELAY.merge!({
+    "s1-eth4" => '0ms',
+  })
 
 when /linearTopoK4N2-single/i
 
